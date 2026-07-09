@@ -34,7 +34,7 @@ def test_out_of_scope_registry_flags_marshall_and_wake():
 def test_every_history_edge_target_is_a_real_canonical_county():
     counties = rpa_geo.load_counties()
     edges = rpa_geo.load_history_edges()
-    assert len(edges) == 29
+    assert len(edges) == 30
     for edge in edges.values():
         assert edge.canonical_geoid in counties, (
             f"{edge.legacy_geoid} -> {edge.canonical_geoid} is not canonical"
