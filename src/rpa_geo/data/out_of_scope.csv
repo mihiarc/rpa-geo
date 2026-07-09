@@ -1,0 +1,3 @@
+code,label,reason,seen_in
+75001,Marshall Islands,"Not US Census geography at all -- the Marshall Islands is an independent sovereign nation (Compact of Free Association), not a US state, DC, or territory. Never had a Census-recognized county-equivalent GEOID. Likely a data-entry artifact in the source spreadsheet.",rpa-socioeconomic-downscaling
+76001,Wake Island,"A US territory (administered by the US Air Force / Department of the Interior) but has no permanent civilian population and is not tabulated by the Census Bureau as a county-equivalent. No canonical GEOID exists for it.",rpa-socioeconomic-downscaling
