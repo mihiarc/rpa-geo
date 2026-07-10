@@ -5,9 +5,11 @@ import pytest
 import rpa_geo
 from crosswalks.landuse2030_fips import (
     CT_DUPLICATE_NEW_REGIONS,
+    KNOWN_MISSING_CONUS_GEOIDS,
     UNEXPECTED_NON_CONUS_IN_GEOREF,
     resolve,
 )
+from rpa_geo.splits import NEW_CT_REGION_FIPS
 
 GEOREF_CSV = (
     Path(__file__).parent.parent.parent
@@ -41,9 +43,11 @@ def test_ct_old_county_allocation():
     assert sum(r.shares) == pytest.approx(1.0, abs=1e-4)
 
 
-def test_ct_duplicate_new_region_flagged():
+def test_ct_new_region_resolves_direct_since_dedup_fix():
+    # Previously flagged ct_duplicate_direct; fixed upstream (rpa-landuse-2030
+    # PR #86 / issue #80), so 09130 is now just a normal canonical GEOID.
     r = resolve("09130")
-    assert r.status == "ct_duplicate_direct"
+    assert r.status == "direct"
 
 
 def test_non_conus_out_of_scope_by_design():
@@ -51,12 +55,32 @@ def test_non_conus_out_of_scope_by_design():
     assert r.status == "out_of_scope_by_design"
 
 
-def test_unexpected_non_conus_flagged_not_silently_included_or_dropped():
-    r = resolve(
-        "78010"
-    )  # St. Croix, VI -- observed in georef.csv despite CONUS+DC design
-    assert r.status == "out_of_scope_but_present"
-    assert r.fips in UNEXPECTED_NON_CONUS_IN_GEOREF
+def test_ct_croix_now_out_of_scope_by_design_since_leak_fix():
+    # Previously flagged out_of_scope_but_present; fixed upstream
+    # (rpa-landuse-2030 PR #86 / issue #81), so St. Croix, VI now correctly
+    # falls out via NON_CONUS_STATEFP alone.
+    r = resolve("78010")
+    assert r.status == "out_of_scope_by_design"
+
+
+@pytest.mark.parametrize(
+    ("attr_name", "fips", "expected_status"),
+    [
+        ("CT_DUPLICATE_NEW_REGIONS", "09130", "ct_duplicate_direct"),
+        ("UNEXPECTED_NON_CONUS_IN_GEOREF", "78010", "out_of_scope_but_present"),
+    ],
+)
+def test_anomaly_status_still_fires_if_reintroduced(
+    monkeypatch, attr_name, fips, expected_status
+):
+    # Both frozensets are empty now that their anomalies are fixed
+    # upstream, but resolve()'s corresponding branch must still catch a
+    # future regression rather than silently missing one.
+    monkeypatch.setattr(
+        f"crosswalks.landuse2030_fips.{attr_name}", frozenset({fips})
+    )
+    r = resolve(fips)
+    assert r.status == expected_status
 
 
 @live_data_available
@@ -85,3 +109,11 @@ def test_every_live_fips_value_resolves_to_a_known_status():
         f for f in universe if resolve(f).status == "out_of_scope_but_present"
     }
     assert non_conus_seen == UNEXPECTED_NON_CONUS_IN_GEOREF
+
+    # A different anomaly shape: canonical CONUS+DC GEOIDs missing from
+    # georef.csv entirely (see KNOWN_MISSING_CONUS_GEOIDS). CT's new 9
+    # planning regions are excluded first -- this repo keeps CT's old 8
+    # counties by design, that's not a gap.
+    conus_geoids = {g for g, c in counties.items() if c.is_conus}
+    missing = conus_geoids - set(universe) - NEW_CT_REGION_FIPS
+    assert missing == KNOWN_MISSING_CONUS_GEOIDS
