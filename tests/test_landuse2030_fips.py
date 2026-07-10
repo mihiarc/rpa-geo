@@ -50,16 +50,6 @@ def test_ct_new_region_resolves_direct_since_dedup_fix():
     assert r.status == "direct"
 
 
-def test_ct_duplicate_direct_status_still_fires_if_reintroduced(monkeypatch):
-    # CT_DUPLICATE_NEW_REGIONS is empty now that the anomaly is fixed, but
-    # the ct_duplicate_direct branch must still catch a future regression.
-    monkeypatch.setattr(
-        "crosswalks.landuse2030_fips.CT_DUPLICATE_NEW_REGIONS", frozenset({"09130"})
-    )
-    r = resolve("09130")
-    assert r.status == "ct_duplicate_direct"
-
-
 def test_non_conus_out_of_scope_by_design():
     r = resolve("02013")  # a normal AK county, not one of the anomalous rows
     assert r.status == "out_of_scope_by_design"
@@ -73,16 +63,24 @@ def test_ct_croix_now_out_of_scope_by_design_since_leak_fix():
     assert r.status == "out_of_scope_by_design"
 
 
-def test_out_of_scope_but_present_status_still_fires_if_reintroduced(monkeypatch):
-    # UNEXPECTED_NON_CONUS_IN_GEOREF is empty now that the leak is fixed,
-    # but the out_of_scope_but_present branch must still catch a regression.
+@pytest.mark.parametrize(
+    ("attr_name", "fips", "expected_status"),
+    [
+        ("CT_DUPLICATE_NEW_REGIONS", "09130", "ct_duplicate_direct"),
+        ("UNEXPECTED_NON_CONUS_IN_GEOREF", "78010", "out_of_scope_but_present"),
+    ],
+)
+def test_anomaly_status_still_fires_if_reintroduced(
+    monkeypatch, attr_name, fips, expected_status
+):
+    # Both frozensets are empty now that their anomalies are fixed
+    # upstream, but resolve()'s corresponding branch must still catch a
+    # future regression rather than silently missing one.
     monkeypatch.setattr(
-        "crosswalks.landuse2030_fips.UNEXPECTED_NON_CONUS_IN_GEOREF",
-        frozenset({"78010"}),
+        f"crosswalks.landuse2030_fips.{attr_name}", frozenset({fips})
     )
-    r = resolve("78010")
-    assert r.status == "out_of_scope_but_present"
-    assert r.fips in {"78010"}
+    r = resolve(fips)
+    assert r.status == expected_status
 
 
 @live_data_available

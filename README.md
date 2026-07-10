@@ -131,12 +131,14 @@ generalizes across all four:
   would be caught again automatically.
 - **rpa-landuse-2030's `georef.csv` had 27 non-CONUS rows despite its own
   documented CONUS+DC-only design** (`NON_CONUS_STATEFP`): 4 of HI's 5
-  counties, 22 of PR's 78 municipios, 1 of VI's 3 islands, zero AK/GU/AS/MP.
-  Flagged `out_of_scope_but_present`, reported upstream as issue #81.
-  **Fixed 2026-07-10** in the same PR #86 (CONUS+DC filter added, reusing
-  `geo.py`'s own `NON_CONUS_STATEFP`) -- verified against the live file;
-  `UNEXPECTED_NON_CONUS_IN_GEOREF` is now an empty, documented frozenset for
-  the same regression-catching reason.
+  counties, 22 of PR's 78 municipios, 1 of VI's 3 islands, zero AK/GU/AS/MP
+  -- issue #81 speculated this leaked in via a BEA CAINC1 regional-accounts
+  join (per the `raw/` directory's file names), a theory the fix below
+  neither confirms nor rules out. Flagged `out_of_scope_but_present`,
+  reported upstream as issue #81. **Fixed 2026-07-10** in the same PR #86
+  (CONUS+DC filter added, reusing `geo.py`'s own `NON_CONUS_STATEFP`) --
+  verified against the live file; `UNEXPECTED_NON_CONUS_IN_GEOREF` is now an
+  empty, documented frozenset for the same regression-catching reason.
 - **rpa-landuse-2030's `georef.csv` is missing 35 canonical CONUS+DC
   GEOIDs entirely** -- a differently-shaped anomaly the two fixes above
   didn't surface, since `resolve()` only ever classifies fips values

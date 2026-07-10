@@ -70,11 +70,13 @@ CT_DUPLICATE_NEW_REGIONS: frozenset[str] = frozenset()
 # FIXED (2026-07-10, rpa-landuse-2030 PR #86 / issue #81): georef.csv used
 # to have 27 non-CONUS GEOIDs (4 HI counties, 22 of PR's 78 municipios, 1
 # of VI's 3 islands) despite the repo's own NON_CONUS_STATEFP design
-# excluding them. Dropped at the source by filtering
-# nri_extractor._create_georef_from_transitions() to CONUS+DC (reusing
-# geo.py's own NON_CONUS_STATEFP). Kept as an empty, documented frozenset
-# (not deleted) so out_of_scope_but_present still fires on a regression
-# rather than silently passing.
+# excluding them -- issue #81 speculated this leaked in via a BEA CAINC1
+# regional-accounts join (per the raw/ directory's file names), a theory
+# the fix neither confirms nor rules out. Dropped at the source by
+# filtering nri_extractor._create_georef_from_transitions() to CONUS+DC
+# (reusing geo.py's own NON_CONUS_STATEFP). Kept as an empty, documented
+# frozenset (not deleted) so out_of_scope_but_present still fires on a
+# regression rather than silently passing.
 UNEXPECTED_NON_CONUS_IN_GEOREF: frozenset[str] = frozenset()
 
 # OPEN (rpa-landuse-2030 issue #87, filed 2026-07-10): 35 canonical
@@ -89,7 +91,7 @@ UNEXPECTED_NON_CONUS_IN_GEOREF: frozenset[str] = frozenset()
 # happened to survive NRI extraction, not a deliberately curated
 # reference" per issue #81) -- not a #86 regression. Flagged, not silently
 # excluded from validation.
-KNOWN_MISSING_CONUS_GEOIDS = frozenset(
+KNOWN_MISSING_CONUS_GEOIDS: frozenset[str] = frozenset(
     {
         "08014",
         "08031",
