@@ -41,6 +41,8 @@ def test_ct_new_region_population_shares_sum_to_one():
         matches = [
             s for s in rpa_geo.historical_splits() if s.successor_geoid == new_fips
         ]
+        for s in matches:
+            assert s.population_share_of_new_region is not None
         total_share = sum(s.population_share_of_new_region for s in matches)
         assert total_share == pytest.approx(1.0, abs=1e-4)
 

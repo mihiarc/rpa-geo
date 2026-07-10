@@ -139,14 +139,16 @@ generalizes across all four:
    column, join through it to canonical first.
 3. If your data uses a GEOID in `historical_splits.csv`'s
    `predecessor_geoid` column (CT's old counties, or one of the three AK
-   splits), decide whether you need a 1:1 approximation (pick the
-   `successor_geoid` with the largest share) or a true split (fan out by
-   share, depending on direction). For CT, also pick a weight basis: land
-   area (`share_of_predecessor` / `share_of_new_region`, all 25 rows) or
-   2020 town population (`population_share_of_predecessor` /
-   `population_share_of_new_region`, CT's 19 rows only -- `None` for AK).
-   Use population weights if you're allocating people/economic data;
-   land-area weights if you're allocating land.
+   splits), first pick a weight basis: land area (`share_of_predecessor` /
+   `share_of_new_region`, all 25 rows) or, for CT only, 2020 town population
+   (`population_share_of_predecessor` / `population_share_of_new_region`,
+   19 rows -- `None` for AK). Use population weights if you're allocating
+   people/economic data; land-area weights if you're allocating land. Then
+   decide whether you need a 1:1 approximation (pick the `successor_geoid`
+   with the largest share *on your chosen basis* -- `resolve_predecessor()`'s
+   own ordering is always by the area share, so sort the returned tuple
+   yourself if you picked population) or a true split (fan out by share,
+   depending on direction).
 4. Check any GEOID you can't resolve against `out_of_scope.csv` before
    assuming it's a bug in this package.
 5. Add a per-repo crosswalk under `crosswalks/` in this repo (see

@@ -71,7 +71,13 @@ def historical_splits() -> tuple[Split, ...]:
 
 
 def resolve_predecessor(predecessor_geoid: str) -> tuple[Split, ...]:
-    """All successor allocations for one predecessor GEOID, largest share first.
+    """All successor allocations for one predecessor GEOID, largest *area* share first.
+
+    The ordering is always by ``share_of_predecessor`` (land area), even for
+    CT rows that also carry a ``population_share_of_predecessor``. A caller
+    picking a 1:1 approximation on the population basis instead must sort
+    the returned tuple by ``population_share_of_predecessor`` itself --
+    the two bases don't always agree on which successor is largest.
 
     Returns an empty tuple if ``predecessor_geoid`` isn't a known split
     predecessor -- callers should treat that as "not a split case", not as
