@@ -34,6 +34,9 @@ class Split:
     share_of_new_region: float
     case: str
     note: str
+    population_weight_basis: str | None = None
+    population_share_of_predecessor: float | None = None
+    population_share_of_new_region: float | None = None
 
 
 @lru_cache(maxsize=1)
@@ -51,13 +54,30 @@ def historical_splits() -> tuple[Split, ...]:
                 share_of_new_region=float(row["share_of_new_region"]),
                 case=row["case"],
                 note=row["note"],
+                population_weight_basis=row["population_weight_basis"] or None,
+                population_share_of_predecessor=(
+                    float(row["population_share_of_predecessor"])
+                    if row["population_share_of_predecessor"]
+                    else None
+                ),
+                population_share_of_new_region=(
+                    float(row["population_share_of_new_region"])
+                    if row["population_share_of_new_region"]
+                    else None
+                ),
             )
         )
     return tuple(rows)
 
 
 def resolve_predecessor(predecessor_geoid: str) -> tuple[Split, ...]:
-    """All successor allocations for one predecessor GEOID, largest share first.
+    """All successor allocations for one predecessor GEOID, largest *area* share first.
+
+    The ordering is always by ``share_of_predecessor`` (land area), even for
+    CT rows that also carry a ``population_share_of_predecessor``. A caller
+    picking a 1:1 approximation on the population basis instead must sort
+    the returned tuple by ``population_share_of_predecessor`` itself --
+    the two bases don't always agree on which successor is largest.
 
     Returns an empty tuple if ``predecessor_geoid`` isn't a known split
     predecessor -- callers should treat that as "not a split case", not as

@@ -26,17 +26,50 @@ canonical reference at its own pace via the crosswalk built for it.
 |---|---|
 | `counties_2025.csv` | The canonical reference table: one row per current county/equivalent, with `is_conus` and `is_territory` flags. |
 | `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 30 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "A direction bug we caught" below) -- don't assume the naive higher-number-is-older pattern holds. |
-| `historical_splits.csv` | GEOIDs that don't map 1:1 to canonical -- they were divided among several current counties, so there's only an allocation, not a single answer. Four cases, 25 rows: Connecticut's 2022 planning-region switch (many-to-many, 19 rows, town-land-area-weighted) and three Alaska Census Area retirements that are clean 2-way splits (Wrangell-Petersburg 2008, Skagway-Hoonah-Angoon 2007, Valdez-Cordova 2019 -- each weighted by the current land area of its two successors). |
+| `historical_splits.csv` | GEOIDs that don't map 1:1 to canonical -- they were divided among several current counties, so there's only an allocation, not a single answer. Four cases, 25 rows: Connecticut's 2022 planning-region switch (many-to-many, 19 rows, weighted both by town land area *and* by 2020 town population -- see below) and three Alaska Census Area retirements that are clean 2-way splits (Wrangell-Petersburg 2008, Skagway-Hoonah-Angoon 2007, Valdez-Cordova 2019 -- each weighted by the current land area of its two successors only). |
 | `out_of_scope.csv` | Codes seen in the wild that are not real Census geography at all, with the reason (Marshall Islands, Wake Island). |
 
-## Why area-weighted, not population-weighted, for the split allocations
+## Area- and population-weighted split allocations
 
-Town-level 2020 population by county subdivision requires a Census API key
-(`api.census.gov` now rejects unauthenticated requests). Land area doesn't.
-Shipping the area-weighted version now and swapping in population weights
-later (once a key is available, via `CENSUS_API_KEY` env var, never
-hardcoded) is a strict improvement, not a redo -- the table schema already
-has room for a second weight column.
+`historical_splits.csv` carries **two independent weight bases per row**,
+so consumers pick whichever is appropriate for what they're allocating:
+
+- `weight_basis` / `share_of_predecessor` / `share_of_new_region` --
+  land-area-weighted, present for all 25 rows (CT + AK). Appropriate for
+  land-use/land-area allocation (e.g. `rpa-landuse-2030`'s consumption via
+  `crosswalks/landuse2030_fips.py`).
+- `population_weight_basis` / `population_share_of_predecessor` /
+  `population_share_of_new_region` -- population-weighted, present **only**
+  for CT's 19 `CT_2022_planning_regions` rows (empty string / `None` for the
+  6 AK rows). Appropriate for demographic/economic allocation (e.g.
+  `rpa-socioeconomic-downscaling`'s population/income panel).
+
+Both share sets independently sum to 1.0 per predecessor and per successor
+(validated in `tests/test_splits.py`). Neither is more "canonical" than the
+other -- `Split.share_of_predecessor` never silently changed meaning; a new,
+separate field was added instead, specifically so an existing consumer
+reading the area columns (`landuse2030_fips.py`) wouldn't have its
+methodology altered by a change made for a different consumer's needs.
+
+CT's population weights use the same CT-Data-Collaborative town-level
+crosswalk as the area weights, reweighted by each town's 2020 Census total
+population (P.L. 94-171 Redistricting File, `POP100` field). That file is
+downloaded unauthenticated from `www2.census.gov`'s bulk data mirror (not
+the `api.census.gov` REST API, which does still require a key per the note
+below) -- so no `CENSUS_API_KEY` was needed for this after all.
+
+AK's three splits remain **area-only, deliberately deferred**: unlike CT's
+town-level crosswalk (built for a *current*, static set of towns), AK's
+predecessors are retired Census Areas -- apportioning their population would
+require town/place-level 2020 population spatially joined against the
+*historical* boundary, not just today's successor boundaries. That's
+meaningfully harder and no downstream consumer has asked for it, so it's
+left undone and documented (see each AK row's `note`) rather than guessed.
+
+Historical note: `api.census.gov`, the Census Bureau's REST API, now
+rejects unauthenticated requests and requires a key (`CENSUS_API_KEY` env
+var, never hardcoded, if a future case needs it). That's a separate system
+from the bulk `www2.census.gov` file downloads used here.
 
 ## A direction bug we caught by validating against real data
 
@@ -106,9 +139,15 @@ generalizes across all four:
    column, join through it to canonical first.
 3. If your data uses a GEOID in `historical_splits.csv`'s
    `predecessor_geoid` column (CT's old counties, or one of the three AK
-   splits), decide whether you need a 1:1 approximation (pick the
-   `successor_geoid` with the largest `share_of_predecessor`) or a true
-   split (fan out by `share_of_predecessor` / `share_of_new_region`
+   splits), first pick a weight basis: land area (`share_of_predecessor` /
+   `share_of_new_region`, all 25 rows) or, for CT only, 2020 town population
+   (`population_share_of_predecessor` / `population_share_of_new_region`,
+   19 rows -- `None` for AK). Use population weights if you're allocating
+   people/economic data; land-area weights if you're allocating land. Then
+   decide whether you need a 1:1 approximation (pick the `successor_geoid`
+   with the largest share *on your chosen basis* -- `resolve_predecessor()`'s
+   own ordering is always by the area share, so sort the returned tuple
+   yourself if you picked population) or a true split (fan out by share,
    depending on direction).
 4. Check any GEOID you can't resolve against `out_of_scope.csv` before
    assuming it's a bug in this package.
