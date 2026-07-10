@@ -34,6 +34,9 @@ class Split:
     share_of_new_region: float
     case: str
     note: str
+    population_weight_basis: str | None = None
+    population_share_of_predecessor: float | None = None
+    population_share_of_new_region: float | None = None
 
 
 @lru_cache(maxsize=1)
@@ -51,6 +54,17 @@ def historical_splits() -> tuple[Split, ...]:
                 share_of_new_region=float(row["share_of_new_region"]),
                 case=row["case"],
                 note=row["note"],
+                population_weight_basis=row["population_weight_basis"] or None,
+                population_share_of_predecessor=(
+                    float(row["population_share_of_predecessor"])
+                    if row["population_share_of_predecessor"]
+                    else None
+                ),
+                population_share_of_new_region=(
+                    float(row["population_share_of_new_region"])
+                    if row["population_share_of_new_region"]
+                    else None
+                ),
             )
         )
     return tuple(rows)
