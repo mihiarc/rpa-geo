@@ -92,7 +92,7 @@ data.
 |---|---|---|---|
 | rpa-socioeconomic-downscaling | `cid2` | `downscaling_cid2.py` | All 3,197 live values resolve to an explicit status; 2 flagged for owner review (see findings below). |
 | rpa-slr / rpa-slr-landuse | `county_fips` | `slr_county_fips.py` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. |
-| rpa-landuse-2030 | `fips` | `landuse2030_fips.py` | All 3,104 live `georef.csv` values resolve; 2 anomalies found and flagged (see findings below), reported upstream. |
+| rpa-landuse-2030 | `fips` | `landuse2030_fips.py` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). |
 | rpa-data-portal | n/a | `data_portal_landuse.py` | Documentation only, no resolve() -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
 
 ## Findings surfaced while building these crosswalks
@@ -119,18 +119,37 @@ generalizes across all four:
   guessed. Same for `cid2=02999` ("REMAINDER OF ALASKA", `dropthis=1` and
   zero non-null population rows in the source panel) -- flagged
   `inert_placeholder`, not silently dropped.
-- **rpa-landuse-2030's `georef.csv` represents part of Connecticut twice.**
-  It has all 8 old counties *and* 2 of the 9 new planning regions (Lower
-  Connecticut River Valley 09130, Southeastern Connecticut 09180) as
-  independent rows. Middlesex/New London/part of Windham allocate into those
-  same 2 regions, so summing every row without deduplicating CT double-counts
-  that area. Flagged `ct_duplicate_direct`, reported upstream.
-- **rpa-landuse-2030's `georef.csv` has 27 non-CONUS rows despite its own
+- **rpa-landuse-2030's `georef.csv` represented part of Connecticut twice**
+  (all 8 old counties *and* 2 of the 9 new planning regions, Lower
+  Connecticut River Valley 09130 + Southeastern Connecticut 09180, as
+  independent rows -- double-counting for anything summing every row without
+  deduplicating CT). Flagged `ct_duplicate_direct`, reported upstream as
+  issue #80. **Fixed 2026-07-10** in that repo's PR #86 (dropped at the
+  source in `nri_extractor._create_georef_from_transitions()`) -- verified
+  against the live file; `CT_DUPLICATE_NEW_REGIONS` is now an empty,
+  documented frozenset in `crosswalks/landuse2030_fips.py` so a regression
+  would be caught again automatically.
+- **rpa-landuse-2030's `georef.csv` had 27 non-CONUS rows despite its own
   documented CONUS+DC-only design** (`NON_CONUS_STATEFP`): 4 of HI's 5
-  counties, 22 of PR's 78 municipios, 1 of VI's 3 islands, and zero AK/GU/AS/MP
-  -- a sparse, partial, unexplained leak (possibly from a BEA CAINC1
-  regional-accounts join, given the `data/raw/` file names), not a clean
-  territory inclusion. Flagged `out_of_scope_but_present`, reported upstream.
+  counties, 22 of PR's 78 municipios, 1 of VI's 3 islands, zero AK/GU/AS/MP.
+  Flagged `out_of_scope_but_present`, reported upstream as issue #81.
+  **Fixed 2026-07-10** in the same PR #86 (CONUS+DC filter added, reusing
+  `geo.py`'s own `NON_CONUS_STATEFP`) -- verified against the live file;
+  `UNEXPECTED_NON_CONUS_IN_GEOREF` is now an empty, documented frozenset for
+  the same regression-catching reason.
+- **rpa-landuse-2030's `georef.csv` is missing 35 canonical CONUS+DC
+  GEOIDs entirely** -- a differently-shaped anomaly the two fixes above
+  didn't surface, since `resolve()` only ever classifies fips values
+  *present* in the file, never notices one that's absent. Found by diffing
+  the full canonical `is_conus` set against the live file: DC (`11001`);
+  Denver + Broomfield, CO (consolidated city-and-county governments,
+  `08031`/`08014`); St. Louis City, MO (independent of any county,
+  `29510`); Arlington County + 30 of Virginia's independent cities. Likely
+  a longstanding NRI survey-coverage gap for non-standard
+  county-equivalents (not a PR #86 regression -- see the issue for the
+  reasoning), reported upstream as issue #87. `KNOWN_MISSING_CONUS_GEOIDS`
+  in `crosswalks/landuse2030_fips.py` documents the exact set; not yet
+  fixed upstream.
 
 ## Onboarding a new repo
 

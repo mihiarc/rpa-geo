@@ -14,11 +14,29 @@ old-8-county -> new-9-planning-region switch (already covered by
 GEOID directly.
 
 Validating against the repo's *live* reference table
-(``data/processed/georef.csv``, 3,104 distinct fips) surfaced two anomalies
-neither the repo's own docs nor rpa-geo's design anticipated -- see
-``KNOWN_ANOMALIES`` and the module docstring notes below. Both are flagged
-explicitly, not silently resolved, and were reported upstream (see
-mihiarc/rpa-landuse-2030 issue tracker).
+(``data/processed/georef.csv``) originally surfaced two anomalies (at
+3,104 distinct fips): CT's 2 new-region rows double-counted alongside the
+old 8 counties, and 27 non-CONUS rows despite the repo's own CONUS+DC
+design. Both were **fixed at the source** in rpa-landuse-2030 PR #86
+(merged ``bbbdd66``, closing issues #80/#81) by filtering
+``nri_extractor._create_georef_from_transitions()`` to CONUS+DC and
+dropping the 2 duplicate CT rows. Verified fixed against the live file as
+of 2026-07-10 (now 3,075 distinct fips, zero of either anomaly). See
+``CT_DUPLICATE_NEW_REGIONS`` / ``UNEXPECTED_NON_CONUS_IN_GEOREF`` below --
+kept as empty, documented frozensets (not deleted), so ``resolve()``'s
+corresponding statuses still catch a future regression instead of
+silently missing one.
+
+Re-validating surfaced a **third, differently-shaped** anomaly the first
+pass couldn't see: ``resolve()`` and the live-data test only ever classify
+fips values *present* in ``georef.csv`` -- neither has any way to notice a
+canonically CONUS+DC GEOID that's entirely *absent*. A separate diff
+against ``rpa_geo.load_counties()``'s full ``is_conus`` set found 35 such
+gaps (DC, 2 Colorado consolidated city-counties, St. Louis City MO, and 31
+Virginia county-equivalents -- see ``KNOWN_MISSING_CONUS_GEOIDS``).
+Reported upstream as rpa-landuse-2030 issue #87; likely a longstanding NRI
+survey-coverage gap for non-standard county-equivalents, not a #86
+regression (see that issue for the reasoning).
 """
 
 from __future__ import annotations
@@ -39,52 +57,75 @@ Status = Literal[
     "unresolved",
 ]
 
-# The 2 new CT planning-region GEOIDs observed directly in georef.csv
-# ALONGSIDE all 8 old CT counties (Lower Connecticut River Valley 09130,
-# Southeastern Connecticut 09180). Middlesex (09007) allocates almost
-# entirely into 09130, and New London (09011) + part of Windham (09015)
-# allocate into 09180 -- so georef.csv currently represents part of
-# Connecticut TWICE: once via the old counties, once via these 2 new
-# regions directly. Any code that sums every row in georef.csv without
-# deduplicating CT will double-count population/rent data for this area.
-CT_DUPLICATE_NEW_REGIONS = frozenset({"09130", "09180"})
+# FIXED (2026-07-10, rpa-landuse-2030 PR #86 / issue #80): georef.csv used
+# to have 2 new CT planning-region GEOIDs (Lower Connecticut River Valley
+# 09130, Southeastern Connecticut 09180) present directly ALONGSIDE all 8
+# old CT counties -- double-counting that area for anything summing every
+# row without deduplicating CT. Dropped at the source in
+# nri_extractor._create_georef_from_transitions(). Kept as an empty,
+# documented frozenset (not deleted) so ct_duplicate_direct still fires on
+# a regression rather than silently passing.
+CT_DUPLICATE_NEW_REGIONS: frozenset[str] = frozenset()
 
-# Non-CONUS GEOIDs observed directly in georef.csv despite NON_CONUS_STATEFP
-# supposedly excluding them (4 HI counties, 22 of PR's 78 municipios, 1 of
-# VI's 3 islands -- a sparse, partial, unexplained subset, not a clean
-# territory inclusion). Zero AK/GU/AS/MP rows were found, so the exclusion
-# isn't simply "not applied" -- something upstream (likely a BEA CAINC1
-# regional-accounts join, given the raw/ directory's file names) is leaking
-# a handful of non-CONUS rows through.
-UNEXPECTED_NON_CONUS_IN_GEOREF = frozenset(
+# FIXED (2026-07-10, rpa-landuse-2030 PR #86 / issue #81): georef.csv used
+# to have 27 non-CONUS GEOIDs (4 HI counties, 22 of PR's 78 municipios, 1
+# of VI's 3 islands) despite the repo's own NON_CONUS_STATEFP design
+# excluding them. Dropped at the source by filtering
+# nri_extractor._create_georef_from_transitions() to CONUS+DC (reusing
+# geo.py's own NON_CONUS_STATEFP). Kept as an empty, documented frozenset
+# (not deleted) so out_of_scope_but_present still fires on a regression
+# rather than silently passing.
+UNEXPECTED_NON_CONUS_IN_GEOREF: frozenset[str] = frozenset()
+
+# OPEN (rpa-landuse-2030 issue #87, filed 2026-07-10): 35 canonical
+# CONUS+DC GEOIDs (per rpa_geo.load_counties()'s is_conus flag) have no row
+# in georef.csv at all -- neither resolve() nor the live-data test below
+# can catch this shape of gap, since both only ever classify fips values
+# that ARE present. DC; Denver + Broomfield, CO (consolidated
+# city-and-county governments); St. Louis City, MO (independent of any
+# county); Arlington County + 30 of Virginia's independent cities. Likely
+# a longstanding NRI survey-coverage gap for non-standard
+# county-equivalents (georef.csv "was a passive byproduct of whatever fips
+# happened to survive NRI extraction, not a deliberately curated
+# reference" per issue #81) -- not a #86 regression. Flagged, not silently
+# excluded from validation.
+KNOWN_MISSING_CONUS_GEOIDS = frozenset(
     {
-        "15001",
-        "15003",
-        "15007",
-        "15009",
-        "72013",
-        "72053",
-        "72057",
-        "72091",
-        "72101",
-        "72103",
-        "72105",
-        "72107",
-        "72109",
-        "72111",
-        "72113",
-        "72115",
-        "72117",
-        "72119",
-        "72121",
-        "72123",
-        "72125",
-        "72127",
-        "72129",
-        "72131",
-        "72133",
-        "72135",
-        "78010",
+        "08014",
+        "08031",
+        "11001",
+        "29510",
+        "51013",
+        "51510",
+        "51520",
+        "51530",
+        "51540",
+        "51570",
+        "51580",
+        "51590",
+        "51595",
+        "51600",
+        "51610",
+        "51620",
+        "51630",
+        "51640",
+        "51660",
+        "51670",
+        "51678",
+        "51683",
+        "51685",
+        "51690",
+        "51700",
+        "51720",
+        "51730",
+        "51735",
+        "51750",
+        "51770",
+        "51775",
+        "51790",
+        "51820",
+        "51830",
+        "51840",
     }
 )
 
