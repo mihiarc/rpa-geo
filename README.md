@@ -86,14 +86,19 @@ direction for a GEOID rename without checking a primary source (this
 package's history notes cite one per edge) or the consuming repo's live
 data.
 
-## Per-repo crosswalks (`crosswalks/`)
+## Per-repo crosswalks (`src/rpa_geo/crosswalks/`)
+
+Part of the installable `rpa_geo` package (moved here from a repo-root
+`crosswalks/` directory so a consuming repo's `uv add --editable ../rpa-geo`
+can actually import them, not just this repo's own test suite via a
+`sys.path` hack).
 
 | Repo | Key | Module | Status |
 |---|---|---|---|
-| rpa-socioeconomic-downscaling | `cid2` | `downscaling_cid2.py` | All 3,197 live values resolve to an explicit status; 2 flagged for owner review (see findings below). |
-| rpa-slr / rpa-slr-landuse | `county_fips` | `slr_county_fips.py` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. |
-| rpa-landuse-2030 | `fips` | `landuse2030_fips.py` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). |
-| rpa-data-portal | n/a | `data_portal_landuse.py` | Documentation only, no resolve() -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
+| rpa-socioeconomic-downscaling | `cid2` | `rpa_geo.crosswalks.downscaling_cid2` | All 3,197 live values resolve to an explicit status; 2 flagged for owner review (see findings below). |
+| rpa-slr / rpa-slr-landuse | `county_fips` | `rpa_geo.crosswalks.slr_county_fips` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. |
+| rpa-landuse-2030 | `fips` | `rpa_geo.crosswalks.landuse2030_fips` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). |
+| rpa-data-portal | n/a | `rpa_geo.crosswalks.data_portal_landuse` | Documentation only, no resolve() -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
 
 ## Findings surfaced while building these crosswalks
 
@@ -172,14 +177,26 @@ generalizes across all four:
    depending on direction).
 4. Check any GEOID you can't resolve against `out_of_scope.csv` before
    assuming it's a bug in this package.
-5. Add a per-repo crosswalk under `crosswalks/` in this repo (see
-   `crosswalks/downscaling_cid2.py` for the pattern) and a test that
-   round-trips every county in your live dataset to exactly one canonical
-   row. Flag anything you can't responsibly resolve rather than guessing --
-   see the AK findings above for what that looks like in practice.
+5. Add a per-repo crosswalk under `src/rpa_geo/crosswalks/` in this repo
+   (see `src/rpa_geo/crosswalks/downscaling_cid2.py` for the pattern) and a
+   test that round-trips every county in your live dataset to exactly one
+   canonical row. Flag anything you can't responsibly resolve rather than
+   guessing -- see the AK findings above for what that looks like in
+   practice.
 
 Add as a dependency from a consuming repo with:
 
 ```bash
 uv add --editable ../rpa-geo
+```
+
+Then use your repo's crosswalk directly:
+
+```python
+from rpa_geo.crosswalks.downscaling_cid2 import resolve
+
+r = resolve("09001")  # old Hartford County, CT
+r.status            # "ct_allocation"
+r.canonical_geoids  # the new planning-region GEOIDs it splits across
+r.shares            # land-area weight per successor
 ```

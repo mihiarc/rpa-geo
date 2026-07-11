@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import rpa_geo
-from crosswalks.landuse2030_fips import (
+from rpa_geo.crosswalks.landuse2030_fips import (
     CT_DUPLICATE_NEW_REGIONS,
     KNOWN_MISSING_CONUS_GEOIDS,
     UNEXPECTED_NON_CONUS_IN_GEOREF,
@@ -77,7 +77,7 @@ def test_anomaly_status_still_fires_if_reintroduced(
     # upstream, but resolve()'s corresponding branch must still catch a
     # future regression rather than silently missing one.
     monkeypatch.setattr(
-        f"crosswalks.landuse2030_fips.{attr_name}", frozenset({fips})
+        f"rpa_geo.crosswalks.landuse2030_fips.{attr_name}", frozenset({fips})
     )
     r = resolve(fips)
     assert r.status == expected_status

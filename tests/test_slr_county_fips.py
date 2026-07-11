@@ -1,5 +1,5 @@
 import rpa_geo
-from crosswalks.slr_county_fips import resolve
+from rpa_geo.crosswalks.slr_county_fips import resolve
 
 
 def test_direct_passthrough():

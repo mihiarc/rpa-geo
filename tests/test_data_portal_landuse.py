@@ -1,5 +1,5 @@
 import rpa_geo
-from crosswalks import data_portal_landuse
+from rpa_geo.crosswalks import data_portal_landuse
 
 
 def test_module_documents_why_no_resolve_function():

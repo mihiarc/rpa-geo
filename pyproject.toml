@@ -1,6 +1,6 @@
 [project]
 name = "rpa-geo"
-version = "0.1.0"
+version = "0.2.0"
 description = "Canonical US county/county-equivalent reference and per-repo crosswalks for RPA pipeline repos"
 readme = "README.md"
 authors = [
