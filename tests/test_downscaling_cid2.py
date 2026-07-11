@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import rpa_geo
-from crosswalks.downscaling_cid2 import resolve
+from rpa_geo.crosswalks.downscaling_cid2 import resolve
 
 DOWNSCALING_RAW = (
     Path(__file__).parent.parent.parent
@@ -159,6 +159,6 @@ def test_every_live_cid2_value_resolves_to_a_known_status():
 
     # Every genuinely unresolved code must be one we've explicitly flagged and
     # explained (see UNRESOLVED_CID2) -- never a silent surprise.
-    from crosswalks.downscaling_cid2 import UNRESOLVED_CID2
+    from rpa_geo.crosswalks.downscaling_cid2 import UNRESOLVED_CID2
 
     assert set(unresolved) <= set(UNRESOLVED_CID2)
