@@ -20,11 +20,22 @@ canonical reference at its own pace via the crosswalk built for it.
   geography (see `out_of_scope.csv`).
 - **Key:** `geoid`, the current 5-digit Census FIPS/GEOID string.
 
+Vintages are shipped **side-by-side**, not overwritten in place --
+`counties_2025.csv` today, `counties_2031.csv` alongside it once TIGER-2031+
+is onboarded, and so on. `rpa_geo.load_counties()` defaults to
+`rpa_geo.LATEST_VINTAGE`, but takes an explicit `vintage=` argument, and
+`rpa_geo.available_vintages()` discovers every vintage this package version
+ships (from the `counties_*.csv` filenames present -- no per-vintage code
+change needed). This means a consuming repo isn't forced to move onto a new
+Census vintage the moment this package adds one; it can keep pinning an
+older vintage explicitly until it's ready. See "Onboarding a new vintage"
+below for how a new one gets added.
+
 ## Package data (`src/rpa_geo/data/`)
 
 | File | Contents |
 |---|---|
-| `counties_2025.csv` | The canonical reference table: one row per current county/equivalent, with `is_conus` and `is_territory` flags. |
+| `counties_2025.csv` | The canonical reference table for the 2025 vintage: one row per current county/equivalent, with `is_conus` and `is_territory` flags. A future vintage bump adds `counties_YYYY.csv` alongside this file, not in place of it. |
 | `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 30 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "A direction bug we caught" below) -- don't assume the naive higher-number-is-older pattern holds. |
 | `historical_splits.csv` | GEOIDs that don't map 1:1 to canonical -- they were divided among several current counties, so there's only an allocation, not a single answer. Four cases, 25 rows: Connecticut's 2022 planning-region switch (many-to-many, 19 rows, weighted both by town land area *and* by 2020 town population -- see below) and three Alaska Census Area retirements that are clean 2-way splits (Wrangell-Petersburg 2008, Skagway-Hoonah-Angoon 2007, Valdez-Cordova 2019 -- each weighted by the current land area of its two successors only). |
 | `out_of_scope.csv` | Codes seen in the wild that are not real Census geography at all, with the reason (Marshall Islands, Wake Island). |
@@ -95,10 +106,93 @@ can actually import them, not just this repo's own test suite via a
 
 | Repo | Key | Module | Status |
 |---|---|---|---|
-| rpa-socioeconomic-downscaling | `cid2` | `rpa_geo.crosswalks.downscaling_cid2` | All 3,197 live values resolve to an explicit status; 2 flagged for owner review (see findings below). |
-| rpa-slr / rpa-slr-landuse | `county_fips` | `rpa_geo.crosswalks.slr_county_fips` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. |
-| rpa-landuse-2030 | `fips` | `rpa_geo.crosswalks.landuse2030_fips` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). |
-| rpa-data-portal | n/a | `rpa_geo.crosswalks.data_portal_landuse` | Documentation only, no resolve() -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
+| rpa-socioeconomic-downscaling | `cid2` | `rpa_geo.crosswalks.downscaling_cid2` | All 3,197 live values resolve to an explicit status; 2 flagged for owner review (see findings below). Ships `validate_universe()`. |
+| rpa-slr / rpa-slr-landuse | `county_fips` | `rpa_geo.crosswalks.slr_county_fips` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. Ships `validate_universe()`. |
+| rpa-landuse-2030 | `fips` | `rpa_geo.crosswalks.landuse2030_fips` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). Ships `validate_universe()`. |
+| rpa-data-portal | n/a | `rpa_geo.crosswalks.data_portal_landuse` | Documentation only, no resolve() (and so no `validate_universe()`) -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
+
+## Enforcing the contract: `validate_universe()`
+
+A crosswalk's `resolve()` only tells you the answer for one key at a time --
+nothing stops a consuming repo's pipeline from calling it, getting an
+`unresolved_needs_review` status back, and quietly proceeding anyway (this
+is exactly the shape of a real bug found in `rpa-landuse-2030`'s
+`slr_mask.py`: a county-key mismatch there silently returns zero candidate
+plots, indistinguishable from "this county legitimately has none"). A test
+that checks this once isn't enough either -- it only covers whatever
+universe of keys existed when the test was written, not whatever shows up
+in production data next year.
+
+`validate_universe()` is the fail-loud version, meant to be called at a
+repo's own data-ingest boundary, in the pipeline's actual code path:
+
+```python
+from rpa_geo.crosswalks.downscaling_cid2 import validate_universe
+
+# Raises pandera.errors.SchemaErrors -- listing every offending key and the
+# category it resolved to, not just the first -- if anything falls outside
+# the allowed set. Call this where the pipeline currently trusts its county
+# key blindly, not just in a test.
+validate_universe(live_cid2_values)
+```
+
+Every crosswalk with a `resolve()` (all but `data_portal_landuse`, which has
+none) ships one. Internally, each fine-grained `Status` (e.g.
+`ct_allocation`, `ak_split_allocation`, `pacific_1to1`) maps to one of seven
+shared `Category` values via `rpa_geo.contracts.STATUS_CATEGORY` --
+`direct`, `history_edge`, `split_allocation`, `territory_fanout`,
+`out_of_scope`, `inert_placeholder`, `unresolved_needs_review`. This exists
+because two crosswalks independently hand-rolled near-identical
+allocation/out-of-scope logic under different names; the shared `Category`
+stops a third one from doing it again, without renaming any existing
+`Status` string (nothing outside this package depends on those strings yet,
+but the crosswalks' own tests do, so nothing was renamed to avoid an
+unnecessary breaking change).
+
+By default, `validate_universe()` allows anything that's fully resolved or
+correctly, knowingly excluded (`direct`, `history_edge`,
+`split_allocation`, `out_of_scope`, `inert_placeholder` --
+`rpa_geo.contracts.RESOLVED_CATEGORIES`) and raises on anything that
+represents a genuine live gap (`territory_fanout` -- e.g. American Samoa's
+missing weights; `unresolved_needs_review`). A caller who's consciously
+decided to tolerate a specific gap can widen the allowed set explicitly via
+the `allow=` argument -- the default just doesn't make that choice silently.
+
+## Nonstandard county-equivalents
+
+`rpa_geo.nonstandard_county_equivalents()` is a documented, tested set of
+GEOIDs whose real-world shape -- independent city, consolidated
+city-county government, or the federal district -- commonly breaks code
+that assumes every place nests under exactly one ordinary "county" parent.
+Three different repos (and this package's own crosswalks) have separately
+rediscovered pieces of this; this is meant to let the *next* one self-check
+before shipping instead of rediscovering it again the way
+`rpa-landuse-2030` issue #87 did.
+
+It's a union of two parts, verified by direct inspection of
+`counties_2025.csv` (not assumed from Census documentation alone):
+
+- **Mechanically derived**: every GEOID with Census `lsad` code `"25"`
+  ("city (independent)") -- Baltimore MD, St. Louis MO, and all of
+  Virginia's independent cities. This updates itself automatically if a
+  future vintage adds or removes one; no maintenance needed.
+- **Hand-curated** (`CONSOLIDATED_CITY_COUNTY_GEOIDS`): Denver and
+  Broomfield, CO, Carson City, NV, and DC. None of these are distinguishable
+  from an ordinary county by any single field in the source extract --
+  Denver and Broomfield share the ordinary county `lsad` "06" with ~3,000
+  unrelated rows; DC shares `lsad` "00" with unrelated territory
+  placeholders (Guam, two uninhabited American Samoa islands). Cited here
+  the same way `history_edges.csv` cites entries that can't be mechanically
+  derived either.
+
+This is **not** a completeness check. A GEOID can be a perfectly ordinary
+county (Arlington, VA, `lsad` "06") and still be missing from some other
+repo's own reference table for a completely unrelated reason -- that's what
+`rpa-landuse-2030`'s `KNOWN_MISSING_CONUS_GEOIDS` (in
+`crosswalks/landuse2030_fips.py`) already checks separately, by diffing
+against `load_counties()`'s `is_conus` flag. Use that kind of diff for
+completeness; use this set to check whether your own ingestion code even
+handles this *shape* of GEOID at all.
 
 ## Findings surfaced while building these crosswalks
 
@@ -182,7 +276,50 @@ generalizes across all four:
    test that round-trips every county in your live dataset to exactly one
    canonical row. Flag anything you can't responsibly resolve rather than
    guessing -- see the AK findings above for what that looks like in
-   practice.
+   practice. Add every fine-grained `Status` your crosswalk introduces to
+   `rpa_geo.contracts.STATUS_CATEGORY` (a test enforces this -- see
+   `tests/test_contracts.py`), and ship a `validate_universe()` wrapper (a
+   few lines -- see any existing crosswalk) so consumers get the fail-loud
+   contract, not just `resolve()`.
+
+## Onboarding a new vintage
+
+Distinct from onboarding a new *repo* above -- this is for whenever the
+Census Bureau ships the next cartographic boundary file (TIGER-2031+, after
+the 2030 Census).
+
+1. Ingest the new vintage's attribute table (the generalized
+   `cb_YYYY_us_county_500k` file, same source as `counties_2025.csv`) as
+   `counties_YYYY.csv`, **alongside** the prior vintage file, not replacing
+   it -- `load_counties()` and `available_vintages()` pick it up
+   automatically from the filename; no code change needed for that part.
+2. Cross-reference the Census Bureau's own published documentation of
+   changes between the two vintages, rather than inferring changes from a
+   numeric GEOID diff alone. This isn't optional caution -- it's exactly
+   the discipline that caught the Shannon-to-Oglala-Lakota direction bug in
+   the current data (see "A direction bug we caught" above): a naive
+   higher/lower-number heuristic got the rename direction backwards, and
+   only checking a primary source caught it.
+3. Classify every GEOID-set delta: unchanged, renamed 1:1 (add to
+   `history_edges.csv`), split 1:many (add to `historical_splits.csv`,
+   picking a fresh weight basis from new source data -- don't carry over a
+   prior split's ratio), or merged many:1. The merge shape needs no schema
+   change: `historical_splits.csv`'s row-per-(predecessor, successor) shape
+   already generalizes to it (multiple predecessor rows can already point
+   at one successor) -- it's simply unexercised by any real case so far.
+4. Extend, don't overwrite, `history_edges.csv` / `historical_splits.csv`
+   with the new interval's edges, each citing its primary source the way
+   every existing edge already does.
+5. Cut a new rpa-geo release. The version bump signals the new vintage is
+   available; the old vintage file and its tag remain resolvable for any
+   consumer not ready to move (see "Vintages are shipped side-by-side"
+   above).
+6. Each consuming repo migrates to the new vintage on its own schedule,
+   using the same crosswalk-authoring pattern as "Onboarding a new repo"
+   above -- except now both sides of the crosswalk are canonical schemas
+   with identical column names, which is mechanically simpler than any of
+   today's repo-specific crosswalks (each of which bridges canonical
+   against a genuinely different, repo-invented key).
 
 Add as a dependency from a consuming repo with:
 
@@ -193,10 +330,15 @@ uv add --editable ../rpa-geo
 Then use your repo's crosswalk directly:
 
 ```python
-from rpa_geo.crosswalks.downscaling_cid2 import resolve
+from rpa_geo.crosswalks.downscaling_cid2 import resolve, validate_universe
 
 r = resolve("09001")  # old Hartford County, CT
 r.status            # "ct_allocation"
 r.canonical_geoids  # the new planning-region GEOIDs it splits across
 r.shares            # land-area weight per successor
+
+# Fail loud at your own pipeline's ingest boundary, on the live universe --
+# raises pandera.errors.SchemaErrors listing every offending key if
+# anything falls outside the resolved/correctly-excluded categories.
+validate_universe(live_cid2_values)
 ```

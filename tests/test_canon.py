@@ -1,4 +1,40 @@
+import pytest
+
 import rpa_geo
+
+
+def test_available_vintages_includes_2025():
+    assert "2025" in rpa_geo.available_vintages()
+
+
+def test_latest_vintage_defaults_to_2025():
+    assert rpa_geo.LATEST_VINTAGE == "2025"
+
+
+def test_load_counties_explicit_vintage_matches_default():
+    assert rpa_geo.load_counties(vintage="2025") == rpa_geo.load_counties()
+
+
+def test_load_counties_unknown_vintage_raises():
+    with pytest.raises(ValueError, match="2031"):
+        rpa_geo.load_counties(vintage="2031")
+
+
+def test_nonstandard_county_equivalents_matches_known_cases():
+    nse = rpa_geo.nonstandard_county_equivalents()
+    # independent cities (mechanically derived from lsad) + hand-curated
+    # consolidated city-county governments and DC
+    for expected in ("11001", "08031", "08014", "32510", "29510", "51510"):
+        assert expected in nse, f"{expected} should be a nonstandard county-equivalent"
+    # an ordinary county missing from some *other* repo's reference table
+    # for an unrelated reason (rpa-landuse-2030 issue #87) is not this shape
+    assert "51013" not in nse  # Arlington County, VA -- an ordinary county
+
+
+def test_nonstandard_county_equivalents_are_all_real_canonical_geoids():
+    counties = rpa_geo.load_counties()
+    for geoid in rpa_geo.nonstandard_county_equivalents():
+        assert geoid in counties
 
 
 def test_counties_full_census_universe_scope():

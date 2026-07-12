@@ -23,10 +23,12 @@ every one of them explicitly.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
 import rpa_geo
+from rpa_geo import contracts
 from rpa_geo.splits import OLD_CT_COUNTY_FIPS
 
 Status = Literal[
@@ -150,3 +152,17 @@ def resolve(cid2: str) -> Resolution:
         None,
         "Not a canonical GEOID, not in history_edges, not a known split predecessor, and not a known special case. Needs investigation.",
     )
+
+
+def validate_universe(
+    cid2_values: Iterable[str],
+    *,
+    allow: frozenset[contracts.Category] = contracts.RESOLVED_CATEGORIES,
+) -> None:
+    """Raise if any cid2 value resolves outside ``allow`` -- see rpa_geo.contracts.
+
+    Call this at the panel's own ingest boundary, on the live cid2 universe,
+    before any downstream code trusts it -- not just in a test that might
+    not cover a value that only shows up in production data.
+    """
+    contracts.validate_universe(cid2_values, resolve, allow=allow)

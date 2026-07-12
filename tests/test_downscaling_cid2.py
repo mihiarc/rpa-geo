@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import rpa_geo
-from rpa_geo.crosswalks.downscaling_cid2 import resolve
+from rpa_geo.crosswalks.downscaling_cid2 import resolve, validate_universe
 
 DOWNSCALING_RAW = (
     Path(__file__).parent.parent.parent
@@ -162,3 +162,38 @@ def test_every_live_cid2_value_resolves_to_a_known_status():
     from rpa_geo.crosswalks.downscaling_cid2 import UNRESOLVED_CID2
 
     assert set(unresolved) <= set(UNRESOLVED_CID2)
+
+
+@live_data_available
+def test_validate_universe_flags_exactly_the_known_gaps_on_live_data():
+    import pandas as pd
+    import pandera.errors as pandera_errors
+
+    imp = pd.read_excel(IMPORTABLE_XLSX, sheet_name="importable", usecols=["cid2"])
+    htf_h = pd.read_excel(
+        HTF_HISTORICAL_XLSX, sheet_name="htf_data_by_county", usecols=["cid2"]
+    )
+    htf_p = pd.read_excel(
+        HTF_PROJECTED_XLSX,
+        sheet_name="htf_projected_data_by_county_al",
+        usecols=["cid2"],
+    )
+    universe = sorted(
+        {str(int(v)).zfill(5) for v in imp["cid2"].dropna().unique()}
+        | {str(int(v)).zfill(5) for v in htf_h["cid2"].dropna().unique()}
+        | {str(int(v)).zfill(5) for v in htf_p["cid2"].dropna().unique()}
+    )
+
+    with pytest.raises(pandera_errors.SchemaErrors) as excinfo:
+        validate_universe(universe)
+
+    # The whole point of validate_universe() is to fail loud on exactly the
+    # gaps this module already knows about -- not more, not fewer. If this
+    # ever flags something new, that's a real finding, not a silent
+    # expansion the mechanism should absorb.
+    from rpa_geo.crosswalks.downscaling_cid2 import UNRESOLVED_CID2
+
+    flagged = set(excinfo.value.failure_cases["index"])
+    assert flagged <= set(UNRESOLVED_CID2) | {
+        "74001"
+    }  # 74001: American Samoa, territory_fanout
