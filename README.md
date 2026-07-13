@@ -36,7 +36,7 @@ below for how a new one gets added.
 | File | Contents |
 |---|---|
 | `counties_2025.csv` | The canonical reference table for the 2025 vintage: one row per current county/equivalent, with `is_conus` and `is_territory` flags. A future vintage bump adds `counties_YYYY.csv` alongside this file, not in place of it. |
-| `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 30 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "A direction bug we caught" below) -- don't assume the naive higher-number-is-older pattern holds. |
+| `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 31 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "A direction bug we caught" below) -- don't assume the naive higher-number-is-older pattern holds. |
 | `historical_splits.csv` | GEOIDs that don't map 1:1 to canonical -- they were divided among several current counties, so there's only an allocation, not a single answer. Four cases, 25 rows: Connecticut's 2022 planning-region switch (many-to-many, 19 rows, weighted both by town land area *and* by 2020 town population -- see below) and three Alaska Census Area retirements that are clean 2-way splits (Wrangell-Petersburg 2008, Skagway-Hoonah-Angoon 2007, Valdez-Cordova 2019 -- each weighted by the current land area of its two successors only). |
 | `out_of_scope.csv` | Codes seen in the wild that are not real Census geography at all, with the reason (Marshall Islands, Wake Island). |
 
@@ -153,8 +153,9 @@ By default, `validate_universe()` allows anything that's fully resolved or
 correctly, knowingly excluded (`direct`, `history_edge`,
 `split_allocation`, `out_of_scope`, `inert_placeholder` --
 `rpa_geo.contracts.RESOLVED_CATEGORIES`) and raises on anything that
-represents a genuine live gap (`territory_fanout` -- e.g. American Samoa's
-missing weights; `unresolved_needs_review`). A caller who's consciously
+represents a genuine live gap (`territory_fanout`, `unresolved_needs_review`
+-- no live cid2 lands in either today, after the `02231` / American Samoa
+resolutions below). A caller who's consciously
 decided to tolerate a specific gap can widen the allowed set explicitly via
 the `allow=` argument -- the default just doesn't make that choice silently.
 
@@ -212,12 +213,20 @@ generalizes across all four:
 - **`cid2=02231`** ("Skagway-Yakutat-Angoon Census Area" per
   rpa-socioeconomic-downscaling's own `name` column, populated 1970-2022) is
   a *deeper* legacy code than anything else in this package -- it predates
-  even the 2007 Skagway-Hoonah-Angoon split. We couldn't independently
-  verify its further breakdown into current AK geography, so it's flagged
-  `unresolved_needs_review` in `crosswalks/downscaling_cid2.py` rather than
-  guessed. Same for `cid2=02999` ("REMAINDER OF ALASKA", `dropthis=1` and
-  zero non-null population rows in the source panel) -- flagged
-  `inert_placeholder`, not silently dropped.
+  even the 2007 Skagway-Hoonah-Angoon split, so we couldn't independently
+  verify its breakdown into current AK geography. It was flagged
+  `unresolved_needs_review` until the downscaling owner (J. Prestemon)
+  directed mapping it to Hoonah-Angoon (`02105`) on 2026-07-13; it's now a
+  `downscaling_cid2_specific` edge in `history_edges.csv` (a reporting
+  simplification per that instruction, not a verified equivalence).
+- **`cid2=74001`** (American Samoa) carries the territory as a single row,
+  though Census recognizes five districts (`60010`-`60050`). Rather than fan
+  it out without weights, the downscaling owner elected not to model American
+  Samoa (2026-07-13), so it's flagged `inert_placeholder` (knowingly
+  excluded).
+- **`cid2=02999`** ("REMAINDER OF ALASKA", `dropthis=1` and zero non-null
+  population rows in the source panel) -- flagged `inert_placeholder`, not
+  silently dropped.
 - **rpa-landuse-2030's `georef.csv` represented part of Connecticut twice**
   (all 8 old counties *and* 2 of the 9 new planning regions, Lower
   Connecticut River Valley 09130 + Southeastern Connecticut 09180, as

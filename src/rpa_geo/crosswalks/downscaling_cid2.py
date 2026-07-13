@@ -9,11 +9,12 @@ projected Excel files -- 3,197 distinct values as of 2026-07) to one of:
   ``rpa_geo.history_edges`` 1:1 edge applies)
 - an allocation across several canonical GEOIDs (CT's old counties, three AK
   Census Area splits -- see ``rpa_geo.splits``)
-- a flagged Pacific placeholder (Guam resolves 1:1; American Samoa cannot,
-  since cid2 carries it as a single row but Census recognizes 5 districts;
-  Marshall Islands/Wake Island are out of scope, not real Census geography)
-- an explicit "needs downscaling-repo-owner review" case, for the handful of
-  legacy AK codes this module cannot responsibly resolve alone (see
+- a Pacific placeholder resolved 1:1 (Guam -> 66010)
+- a knowingly-dropped code (American Samoa: the downscaling owner elected not
+  to model the territory on 2026-07-13; Marshall Islands / Wake Island are out
+  of scope, not real Census geography)
+- an explicit "needs downscaling-repo-owner review" case for any legacy code
+  this module cannot responsibly resolve alone (currently none -- see
   UNRESOLVED below)
 
 Nothing here is silently dropped -- every code in the live universe resolves
@@ -53,29 +54,20 @@ class Resolution:
     note: str
 
 
-# American Samoa's 5 canonical districts, for the pacific_unresolved case.
-_AMERICAN_SAMOA_DISTRICTS = ("60010", "60020", "60030", "60040", "60050")
-
 # cid2 values this module cannot responsibly resolve without input from the
-# downscaling repo's owner. "02231" is the deepest-legacy AK code observed
-# (source data names it "Skagway-Yakutat-Angoon Census Area", populated for
-# 1970-2022): it predates even the 2007 Skagway-Hoonah-Angoon split this
-# package already models, and its further breakdown (Skagway + Hoonah-Angoon
-# + a portion of Yakutat) isn't independently verified here.
-UNRESOLVED_CID2: dict[str, str] = {
-    "02231": (
-        "Named 'Skagway-Yakutat-Angoon Census Area' in the repo's own `name` "
-        "column; populated 1970-2022 in importable19. Predates the 2007 "
-        "Skagway-Hoonah-Angoon split this package models (see "
-        "rpa_geo.splits, case AK_skagway_hoonah_angoon_2007) -- its own "
-        "further breakdown into current AK geography is not verified here."
-    ),
-}
+# downscaling repo's owner. Currently empty: the one former entry, "02231"
+# ("Skagway-Yakutat-Angoon Census Area"), was resolved on 2026-07-13 when the
+# repo owner (J. Prestemon) directed mapping it to Hoonah-Angoon (02105) -- now
+# a downscaling_cid2_specific edge in history_edges.csv. A genuinely
+# unresolvable code gets added back here (resolve() also has a catch-all).
+UNRESOLVED_CID2: dict[str, str] = {}
 
-# cid2 values the repo's own data marks as empty/inert (importable19's
-# `dropthis` flag = 1 AND zero non-null population rows across all years).
+# cid2 values safe to ignore for this repo: either the repo's own data marks
+# them empty/inert (dropthis=1 AND zero non-null population rows), or the repo
+# owner has explicitly elected not to model them.
 INERT_CID2: dict[str, str] = {
     "02999": "Repo's own `name` column: 'REMAINDER OF ALASKA'. dropthis=1 in importable19, and zero non-null population rows across 1970-2100 -- an unused placeholder, not real geography.",
+    "74001": "American Samoa. Census recognizes five districts (60010-60050); the repo carries it as a single row. The downscaling owner (J. Prestemon) elected not to model American Samoa on 2026-07-13, so it is knowingly excluded rather than fanned out to the five districts.",
 }
 
 
@@ -101,15 +93,6 @@ def resolve(cid2: str) -> Resolution:
             ("66010",),
             None,
             "cid2 placeholder for Guam; Guam has exactly one Census county-equivalent (66010), so this is a clean 1:1 resolution.",
-        )
-
-    if cid2 == "74001":  # American Samoa placeholder
-        return Resolution(
-            cid2,
-            "pacific_unresolved",
-            _AMERICAN_SAMOA_DISTRICTS,
-            None,
-            "cid2 carries American Samoa as a single row, but Census recognizes 5 distinct county-equivalent districts. Cannot collapse to one canonical GEOID without population/area weights this module doesn't have (unlike CT, no town-level correspondence + weight source was located for AS in this pass).",
         )
 
     if cid2 in OLD_CT_COUNTY_FIPS:

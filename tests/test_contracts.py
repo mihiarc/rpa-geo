@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import get_args
 
 import pandera.errors as pandera_errors
@@ -58,27 +59,39 @@ def test_validate_universe_passes_on_clean_universe():
 
 
 def test_validate_universe_raises_on_known_unresolved_code():
+    # An unknown code (not canonical, not an edge/split/special case) resolves
+    # to unresolved_needs_review via the catch-all, and validate_universe fails.
     with pytest.raises(pandera_errors.SchemaErrors) as excinfo:
-        downscaling_cid2.validate_universe(["02231"])
+        downscaling_cid2.validate_universe(["00000"])
     failures = excinfo.value.failure_cases
-    assert "02231" in set(failures["index"])
+    assert "00000" in set(failures["index"])
     assert "unresolved_needs_review" in set(failures["failure_case"])
 
 
+def _resolves_to(status):
+    """A minimal resolve() stand-in returning a fixed status, for exercising
+    the contract machinery independent of any live crosswalk value."""
+
+    def _resolve(_key):
+        return SimpleNamespace(status=status)
+
+    return _resolve
+
+
 def test_validate_universe_raises_on_territory_fanout():
+    # No live cid2 resolves to territory_fanout anymore (American Samoa 74001
+    # was settled as a drop on 2026-07-13), so drive the machinery directly.
     with pytest.raises(pandera_errors.SchemaErrors) as excinfo:
-        downscaling_cid2.validate_universe(
-            ["74001"]
-        )  # American Samoa: 1 code, 5 districts, no weights
+        contracts.validate_universe(["x"], _resolves_to("pacific_unresolved"))
     failures = excinfo.value.failure_cases
     assert "territory_fanout" in set(failures["failure_case"])
 
 
 def test_validate_universe_caller_can_widen_allow_set():
-    # A caller who's consciously decided to tolerate a live gap (e.g. while
-    # waiting on American Samoa weights) can opt in explicitly -- the
-    # default just doesn't make that choice for them.
-    downscaling_cid2.validate_universe(
-        ["74001"],
+    # A caller who's consciously decided to tolerate a live gap can opt in
+    # explicitly -- the default just doesn't make that choice for them.
+    contracts.validate_universe(
+        ["x"],
+        _resolves_to("pacific_unresolved"),
         allow=contracts.RESOLVED_CATEGORIES | {"territory_fanout"},
     )

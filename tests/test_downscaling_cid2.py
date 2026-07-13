@@ -82,11 +82,13 @@ def test_guam_resolves_1to1():
     assert r.canonical_geoids == ("66010",)
 
 
-def test_american_samoa_flagged_unresolved_not_silently_dropped():
+def test_american_samoa_dropped_per_owner_decision():
+    # Settled 2026-07-13: the downscaling owner elected not to model American
+    # Samoa, so it's knowingly excluded (inert), not fanned out to 5 districts.
     r = resolve("74001")
-    assert r.status == "pacific_unresolved"
-    assert len(r.canonical_geoids) == 5
-    assert all(g.startswith("600") for g in r.canonical_geoids)
+    assert r.status == "inert_placeholder"
+    assert r.canonical_geoids == ()
+    assert "american samoa" in r.note.lower()
 
 
 def test_marshall_islands_out_of_scope_not_silently_dropped():
@@ -107,9 +109,12 @@ def test_inert_ak_remainder_placeholder():
     assert r.status == "inert_placeholder"
 
 
-def test_deep_legacy_ak_code_flagged_for_review_not_guessed():
+def test_deep_legacy_ak_code_resolved_per_owner_decision():
+    # Settled 2026-07-13: the downscaling owner directed 02231
+    # ("Skagway-Yakutat-Angoon") -> Hoonah-Angoon (02105), now a history edge.
     r = resolve("02231")
-    assert r.status == "unresolved_needs_review"
+    assert r.status == "history_edge"
+    assert r.canonical_geoids == ("02105",)
 
 
 def test_unknown_code_flagged_for_review():
@@ -165,9 +170,8 @@ def test_every_live_cid2_value_resolves_to_a_known_status():
 
 
 @live_data_available
-def test_validate_universe_flags_exactly_the_known_gaps_on_live_data():
+def test_validate_universe_passes_cleanly_on_live_data():
     import pandas as pd
-    import pandera.errors as pandera_errors
 
     imp = pd.read_excel(IMPORTABLE_XLSX, sheet_name="importable", usecols=["cid2"])
     htf_h = pd.read_excel(
@@ -184,16 +188,8 @@ def test_validate_universe_flags_exactly_the_known_gaps_on_live_data():
         | {str(int(v)).zfill(5) for v in htf_p["cid2"].dropna().unique()}
     )
 
-    with pytest.raises(pandera_errors.SchemaErrors) as excinfo:
-        validate_universe(universe)
-
-    # The whole point of validate_universe() is to fail loud on exactly the
-    # gaps this module already knows about -- not more, not fewer. If this
-    # ever flags something new, that's a real finding, not a silent
-    # expansion the mechanism should absorb.
-    from rpa_geo.crosswalks.downscaling_cid2 import UNRESOLVED_CID2
-
-    flagged = set(excinfo.value.failure_cases["index"])
-    assert flagged <= set(UNRESOLVED_CID2) | {
-        "74001"
-    }  # 74001: American Samoa, territory_fanout
+    # After the 2026-07-13 owner decisions (02231 -> 02105; American Samoa
+    # 74001 dropped), every live cid2 resolves to a RESOLVED_CATEGORIES status,
+    # so the whole universe validates with no human-in-the-loop gaps left. If
+    # this ever starts raising, a new unhandled code appeared -- a real finding.
+    validate_universe(universe)  # must not raise
