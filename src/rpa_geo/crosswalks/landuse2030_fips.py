@@ -41,10 +41,12 @@ regression (see that issue for the reasoning).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal
 
 import rpa_geo
+from rpa_geo import contracts
 from rpa_geo.splits import OLD_CT_COUNTY_FIPS
 
 Status = Literal[
@@ -205,3 +207,19 @@ def resolve(fips: str) -> Resolution:
         None,
         "Not a canonical GEOID and not a known special case. Needs investigation.",
     )
+
+
+def validate_universe(
+    fips_values: Iterable[str],
+    *,
+    allow: frozenset[contracts.Category] = contracts.RESOLVED_CATEGORIES,
+) -> None:
+    """Raise if any fips value resolves outside ``allow`` -- see rpa_geo.contracts.
+
+    Call this ahead of any join against this repo's own plot/county
+    universe (e.g. slr_mask.py's plot<->cell crosswalk) -- that's the
+    boundary where a vintage mismatch currently fails silently (a
+    zero-candidate join result indistinguishable from "legitimately no
+    plots of that use"), not after.
+    """
+    contracts.validate_universe(fips_values, resolve, allow=allow)

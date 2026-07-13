@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pandera.errors as pandera_errors
 import pytest
 
 import rpa_geo
@@ -8,6 +9,7 @@ from rpa_geo.crosswalks.landuse2030_fips import (
     KNOWN_MISSING_CONUS_GEOIDS,
     UNEXPECTED_NON_CONUS_IN_GEOREF,
     resolve,
+    validate_universe,
 )
 from rpa_geo.splits import NEW_CT_REGION_FIPS
 
@@ -81,6 +83,22 @@ def test_anomaly_status_still_fires_if_reintroduced(
     )
     r = resolve(fips)
     assert r.status == expected_status
+
+
+def test_validate_universe_passes_on_clean_universe():
+    validate_universe(["06059", "09001", "12086"])
+
+
+def test_validate_universe_raises_on_anomaly(monkeypatch):
+    monkeypatch.setattr(
+        "rpa_geo.crosswalks.landuse2030_fips.UNEXPECTED_NON_CONUS_IN_GEOREF",
+        frozenset({"78010"}),
+    )
+    with pytest.raises(pandera_errors.SchemaErrors) as excinfo:
+        validate_universe(["78010"])
+    # failure_case reports the resolved *category*, not the raw status --
+    # out_of_scope_but_present maps to unresolved_needs_review (see contracts.py)
+    assert "unresolved_needs_review" in set(excinfo.value.failure_cases["failure_case"])
 
 
 @live_data_available
