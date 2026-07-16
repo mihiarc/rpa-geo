@@ -48,7 +48,7 @@ def test_ct_new_region_population_shares_sum_to_one():
 
 
 def test_ak_splits_have_no_population_weights():
-    ak_predecessors = {"02280", "02232", "02261"}
+    ak_predecessors = {"02280", "02232", "02261", "02231", "02070", "02290"}
     for pred in ak_predecessors:
         for s in rpa_geo.resolve_predecessor(pred):
             assert s.population_weight_basis is None
@@ -63,7 +63,7 @@ def test_ct_old_county_rejects_non_ct_input():
 
 def test_ak_splits_shares_sum_to_one():
     counties = rpa_geo.load_counties()
-    ak_predecessors = {"02280", "02232", "02261"}
+    ak_predecessors = {"02280", "02232", "02261", "02231", "02070", "02290"}
     for pred in ak_predecessors:
         splits = rpa_geo.resolve_predecessor(pred)
         assert splits, f"no allocation found for AK predecessor {pred}"

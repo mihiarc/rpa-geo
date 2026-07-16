@@ -110,11 +110,35 @@ def test_inert_ak_remainder_placeholder():
 
 
 def test_deep_legacy_ak_code_resolved_per_owner_decision():
-    # Settled 2026-07-13: the downscaling owner directed 02231
-    # ("Skagway-Yakutat-Angoon") -> Hoonah-Angoon (02105), now a history edge.
+    # First settled 2026-07-13 as a 1:1 edge to Hoonah-Angoon, then superseded
+    # 2026-07-16 by the owner's Alaska_locations_final.xlsx: 02231
+    # ("Skagway-Yakutat-Angoon") is the full three-way aggregate.
     r = resolve("02231")
-    assert r.status == "history_edge"
-    assert r.canonical_geoids == ("02105",)
+    assert r.status == "ak_split_allocation"
+    assert set(r.canonical_geoids) == {"02230", "02282", "02105"}
+    assert r.shares is not None
+    assert sum(r.shares) == pytest.approx(1.0, abs=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("cid2", "expected_members"),
+    [
+        ("02070", {"02070", "02164"}),  # Dillingham + Lake and Peninsula
+        ("02290", {"02290", "02068"}),  # Yukon-Koyukuk + Denali
+    ],
+)
+def test_ak_codes_that_are_also_current_geoids_resolve_as_aggregates(
+    cid2, expected_members
+):
+    # Per the owner's Alaska_locations_final.xlsx (2026-07-16), these cid2
+    # codes mean the pre-1989/1990 combined areas, even though the same GEOIDs
+    # still exist today with smaller boundaries -- so they must fan out, not
+    # pass through as direct.
+    r = resolve(cid2)
+    assert r.status == "ak_split_allocation"
+    assert set(r.canonical_geoids) == expected_members
+    assert r.shares is not None
+    assert sum(r.shares) == pytest.approx(1.0, abs=1e-4)
 
 
 def test_unknown_code_flagged_for_review():

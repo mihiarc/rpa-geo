@@ -74,6 +74,18 @@ STATUS_CATEGORY: dict[str, Category] = {
     "ct_duplicate_direct": "unresolved_needs_review",  # double-count risk, needs a human despite the name
     "out_of_scope_by_design": "out_of_scope",
     "out_of_scope_but_present": "unresolved_needs_review",  # contradicts the repo's own design
+    # census2015-specific (current 2025 GEOID -> the 2015-vintage scheme)
+    "identity": "direct",
+    "renamed": "history_edge",
+    "ak_aggregate_member": "history_edge",  # 1:1 from this key's side: one owner-defined location consumes it
+    "ct_owner_assignment": "split_allocation",  # 1-2 old counties read the region's value (replicated, no weights)
+    "ct_owner_unassigned": "inert_placeholder",  # deliberately unconsumed per the owner's final choices
+    "combo_member": "history_edge",
+    "membership_2015_unknown": "unresolved_needs_review",  # combination membership not owner-confirmed
+    "owner_excluded": "inert_placeholder",
+    "pacific_placeholder": "direct",  # mirrors pacific_1to1: placeholder code, clean 1:1
+    "territory_unmodeled": "unresolved_needs_review",
+    "not_canonical_2025": "unresolved_needs_review",
 }
 
 
