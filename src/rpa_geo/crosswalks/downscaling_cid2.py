@@ -7,6 +7,13 @@ projected Excel files -- 3,197 distinct values as of 2026-07) to one of:
 
 - a single canonical GEOID (most counties: cid2 already equals it, or a
   ``rpa_geo.history_edges`` 1:1 edge applies)
+- an owner-confirmed BEA-style combined reporting unit -> its member counties
+  (Maui+Kalawao 15901, Shawano+Menominee 55901; confirmed by the owner
+  2026-07-30 -- see ``rpa_geo.load_combinations_2015``). Membership only, no
+  shares: the allocation basis is the consumer's choice (the owner splits
+  these by population share in his own code). VA's 24 county+city combos are
+  NOT here yet -- their city membership is unconfirmed, so they still resolve
+  1:1 to the principal county via history edges.
 - an allocation across several canonical GEOIDs (CT's old counties, six AK
   cases -- see ``rpa_geo.splits``. Three of those were established by the
   owner's ``Alaska_locations_final.xlsx``, received 2026-07-16, which defines
@@ -41,6 +48,7 @@ from rpa_geo.splits import OLD_CT_COUNTY_FIPS
 Status = Literal[
     "direct",  # cid2 IS the canonical GEOID already
     "history_edge",  # 1:1 legacy code, resolved via rpa_geo.history_edges
+    "combination",  # owner-confirmed combined reporting unit -> member counties, no shares
     "ct_allocation",  # CT's old 8 counties -> new 9 planning regions
     "ak_split_allocation",  # AK Census Area retirement/split
     "pacific_1to1",  # Guam: cid2 placeholder resolves cleanly to one canonical GEOID
@@ -56,7 +64,9 @@ class Resolution:
     cid2: str
     status: Status
     canonical_geoids: tuple[str, ...]  # empty for out_of_scope/inert/unresolved
-    shares: tuple[float, ...] | None  # None unless status is an allocation
+    shares: tuple[float, ...] | None  # None unless status is an allocation; also
+    # None for "combination" -- membership is confirmed but the weight basis
+    # (population/income/area) is deliberately left to the consumer
     note: str
 
 
@@ -111,6 +121,19 @@ def resolve(cid2: str) -> Resolution:
             tuple(s.successor_geoid for s in splits),
             tuple(s.share_of_predecessor for s in splits),
             "Connecticut's old-county-to-planning-region switch (2022); see rpa_geo.splits for methodology.",
+        )
+
+    combo = rpa_geo.load_combinations_2015().get(cid2)
+    if combo:
+        return Resolution(
+            cid2,
+            "combination",
+            tuple(m.member_geoid_2025 for m in combo),
+            None,
+            "Owner-confirmed combined reporting unit (J. Prestemon, 2026-07-30): "
+            "the cid2 value covers all listed member counties (principal first). "
+            "No shares here by design -- the allocation basis (population, "
+            "income, land area) is the consumer's choice.",
         )
 
     ak_splits = rpa_geo.resolve_predecessor(cid2)

@@ -37,6 +37,22 @@ def test_history_edge():
     assert r.canonical_geoids == ("46102",)
 
 
+@pytest.mark.parametrize(
+    ("cid2", "expected_members"),
+    [
+        ("15901", ("15009", "15005")),  # Maui + Kalawao, principal first
+        ("55901", ("55115", "55078")),  # Shawano + Menominee, principal first
+    ],
+)
+def test_combined_reporting_units_fan_out_to_all_members(cid2, expected_members):
+    # Owner-confirmed 2026-07-30. Membership only -- no shares by design; the
+    # allocation basis is the consumer's choice.
+    r = resolve(cid2)
+    assert r.status == "combination"
+    assert r.canonical_geoids == expected_members
+    assert r.shares is None
+
+
 def test_ct_old_county_allocation():
     r = resolve("09001")
     assert r.status == "ct_allocation"
@@ -182,6 +198,9 @@ def test_every_live_cid2_value_resolves_to_a_known_status():
             assert all(g in counties for g in r.canonical_geoids)
             assert r.shares is not None
             assert sum(r.shares) == pytest.approx(1.0, abs=1e-4)
+        elif r.status == "combination":
+            assert all(g in counties for g in r.canonical_geoids)
+            assert r.shares is None  # membership only; basis is the consumer's
         elif r.status == "pacific_unresolved":
             assert all(g in counties for g in r.canonical_geoids)
         # out_of_scope / inert_placeholder: no canonical_geoids expected

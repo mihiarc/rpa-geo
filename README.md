@@ -36,8 +36,9 @@ below for how a new one gets added.
 | File | Contents |
 |---|---|
 | `counties_2025.csv` | The canonical reference table for the 2025 vintage: one row per current county/equivalent, with `is_conus` and `is_territory` flags. A future vintage bump adds `counties_YYYY.csv` alongside this file, not in place of it. |
-| `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 30 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "A direction bug we caught" below) -- don't assume the naive higher-number-is-older pattern holds. |
+| `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 28 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "A direction bug we caught" below) -- don't assume the naive higher-number-is-older pattern holds. |
 | `historical_splits.csv` | GEOIDs that don't map 1:1 to canonical -- they were divided among several current counties, so there's only an allocation, not a single answer. Seven cases, 32 rows: Connecticut's 2022 planning-region switch (many-to-many, 19 rows, weighted both by town land area *and* by 2020 town population -- see below) and six Alaska cases, each weighted by the current land area of its successors: three Census Area retirements (Wrangell-Petersburg 2008, Skagway-Hoonah-Angoon 2007, Valdez-Cordova 2019), the deeper Skagway-Yakutat-Angoon retirement (1992, expressed directly against its three *current* successors), and two boundary-shrink cases where **the predecessor code is also a current GEOID** (Dillingham 02070 lost Lake and Peninsula in 1989; Yukon-Koyukuk 02290 lost Denali in 1990) -- on current-vintage data those two codes are ordinary counties and must not be fanned out; the split rows describe the pre-shrink combined areas, which is what rpa-socioeconomic-downscaling's `cid2` means by them per the owner's `Alaska_locations_final.xlsx` (2026-07-16). |
+| `combinations_2015.csv` | BEA-style combined reporting units in the 2015 scheme whose **complete** membership the owner has confirmed -- currently 15901 (Maui + Kalawao) and 55901 (Shawano + Menominee), both confirmed by J. Prestemon's 2026-07-30 email. Unlike a history edge (1:1) or a split (weighted allocation), a combination states membership only, principal first; the allocation basis is the consumer's choice (the owner splits these by population share in his own code). VA's 24 county+city combos stay as principal-only history edges until he confirms the city membership. Loaded by `rpa_geo.load_combinations_2015()`. |
 | `census2015_link.csv` | The canonical link between current (2025) GEOIDs and the 2015-vintage scheme used by J. Prestemon's Stata econometric models, for the two states where the schemes diverge structurally (AK 30 rows, CT 10 rows). Converted from the owner's two final crosswalk files (received 2026-07-16, archived at `~/Data/projects/rpa-geo/`); consumed by `crosswalks/census2015.py` -- see "The canonical 2025 <-> 2015 link" below. |
 | `locations_2015_ak.csv` | The owner's 24 Alaska model locations with his attributes (name as he wrote it, `coastal` flag, Census interior point). The source file's `_CX`/`_CY` centroid columns were dropped: they're an antimeridian artifact for Aleutians West (a centroid in the eastern hemisphere); the interior-point columns handle the antimeridian correctly (positive longitude). |
 | `out_of_scope.csv` | Codes seen in the wild that are not real Census geography at all, with the reason (Marshall Islands, Wake Island). |
@@ -112,7 +113,7 @@ can actually import them, not just this repo's own test suite via a
 | rpa-slr / rpa-slr-landuse | `county_fips` | `rpa_geo.crosswalks.slr_county_fips` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. Ships `validate_universe()`. |
 | rpa-landuse-2030 | `fips` | `rpa_geo.crosswalks.landuse2030_fips` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). Ships `validate_universe()`. |
 | rpa-data-portal | n/a | `rpa_geo.crosswalks.data_portal_landuse` | Documentation only, no resolve() (and so no `validate_universe()`) -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
-| urban-rents / rpa-slr / rpa-slr-landuse outputs -> J. Prestemon's Stata models | canonical GEOID -> `cid2` | `rpa_geo.crosswalks.census2015` | The canonical 2025 <-> 2015-scheme link (see the dedicated section below). All but 37 canonical GEOIDs resolve; the 33 `membership_2015_unknown` codes and MP's 4 municipalities are documented gaps awaiting owner input. Ships `validate_universe()`. |
+| urban-rents / rpa-slr / rpa-slr-landuse outputs -> J. Prestemon's Stata models | canonical GEOID -> `cid2` | `rpa_geo.crosswalks.census2015` | The canonical 2025 <-> 2015-scheme link (see the dedicated section below). All but 35 canonical GEOIDs resolve; the 31 `membership_2015_unknown` codes and MP's 4 municipalities are documented gaps awaiting owner input. Ships `validate_universe()`. |
 
 ## The canonical 2025 <-> 2015 link (`crosswalks/census2015`)
 
@@ -125,7 +126,9 @@ direction needed to feed urban-rents / rpa-slr / rpa-slr-landuse outputs
 
 The 2015 side is the same scheme rpa-socioeconomic-downscaling carries as
 `cid2`: approximately Census 2015 FIPS, plus BEA-style combination codes
-(VA's 24 county+city combos, Maui 15901, Shawano/Menominee 55901) and two
+(VA's 24 county+city combos, Maui+Kalawao 15901, Shawano+Menominee 55901 --
+the latter two with complete owner-confirmed membership, see
+`combinations_2015.csv`) and two
 structural divergences defined authoritatively by the owner's two final
 crosswalk files (received 2026-07-16, archived at `~/Data/projects/rpa-geo/`,
 converted to `census2015_link.csv` + `locations_2015_ak.csv`):
@@ -154,16 +157,18 @@ from rpa_geo.crosswalks.census2015 import resolve, from_2015, validate_universe
 resolve("02164").geoids_2015   # ("02070",) -- aggregate into Dillingham+L&P
 resolve("09110").geoids_2015   # ("09003", "09013") -- replicate to both
 from_2015("02231").geoids_2025 # ("02105", "02230", "02282") -- members to aggregate
-validate_universe(county_geoids_of_an_output)  # fail loud on the 37 documented gaps
+validate_universe(county_geoids_of_an_output)  # fail loud on the 35 documented gaps
 ```
 
-**Known gaps, flagged not guessed** (`membership_2015_unknown`, 33 codes):
-28 VA independent cities, Kalawao HI, Shawano WI, La Paz AZ, Cibola NM, and
+**Known gaps, flagged not guessed** (`membership_2015_unknown`, 31 codes):
+28 VA independent cities, La Paz AZ, Cibola NM, and
 Broomfield CO have no code of their own in the live `cid2` universe and are
 presumably absorbed into a neighboring combination code (BEA's definitions
 suggest where) -- but no owner-provided file confirms the membership, so
-`resolve()` flags them and `validate_universe()` raises. Closing this needs
-a third crosswalk file (or explicit confirmation) from the owner --
+`resolve()` flags them and `validate_universe()` raises. (Kalawao HI and
+Shawano WI left this set on 2026-07-30, when the owner confirmed their
+combos' complete membership -- see `combinations_2015.csv`.) Closing the
+rest needs explicit confirmation from the owner --
 consequential for rpa-slr flows especially, since several of the flagged VA
 cities are coastal (e.g. Poquoson 51735, Williamsburg 51830; the larger
 Hampton Roads cities like Norfolk have their own codes in the scheme and
@@ -297,12 +302,16 @@ generalizes across all four:
   which double-counts if summed with their aggregates). That repo's data,
   that owner's call -- pinned in `tests/test_census2015.py` so a change on
   their side shows up as a test diff here, and worth raising with him.
-- **`cid2=55901` likely covers Shawano County too, not Menominee alone**:
-  Shawano (55115) is absent from the live cid2 universe while 55901 is
-  present, and BEA defines 55901 as "Shawano (incl. Menominee)". The
-  `history_edges.csv` mapping (55901 -> 55078) is left unchanged pending
-  owner confirmation; the note on that edge records the evidence, and the
-  reverse direction flags 55115 as `membership_2015_unknown`.
+- **`cid2=55901` covers Shawano County too, not Menominee alone** --
+  suspected 2026-07-16 (Shawano 55115 absent from the live cid2 universe
+  while 55901 present; BEA defines 55901 as "Shawano (incl. Menominee)"),
+  **confirmed by the owner 2026-07-30** ("Menominee + Shawano combined
+  reporting unit 55901", alongside the same confirmation for Maui + Kalawao
+  15901). Both moved from 1:1 `history_edges.csv` rows to
+  `combinations_2015.csv`; `downscaling_cid2.resolve()` now fans them out to
+  all members (status `combination`, no shares -- the allocation basis is
+  the consumer's choice), and Kalawao/Shawano left
+  `membership_2015_unknown` in `crosswalks/census2015.py`.
 - **`cid2=74001`** (American Samoa) carries the territory as a single row,
   though Census recognizes five districts (`60010`-`60050`). Rather than fan
   it out without weights, the downscaling owner elected not to model American

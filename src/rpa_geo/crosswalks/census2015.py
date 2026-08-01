@@ -20,14 +20,16 @@ Census 2015 FIPS, with three deliberate departures:
   09170, Western 09190) are never read; Capitol (09110) is read twice
   (Hartford + Tolland).
 - **BEA-style combinations** merge some small county-equivalents into a
-  neighbor under a 9xx code (VA's 24 county+independent-city combos, Maui
-  15901, Shawano/Menominee 55901). Where the owner's own ``GEOID_RECODES``
-  confirms a member (the principal counties, Menominee, Maui), it resolves
-  here; the 33 codes whose membership is NOT owner-confirmed (28 VA
-  independent cities, Kalawao 15005, Shawano 55115, La Paz 04012, Cibola
-  35006, Broomfield 08014 -- all younger than, or absorbed by, the
+  neighbor under a 9xx code (VA's 24 county+independent-city combos, Maui+
+  Kalawao 15901, Shawano+Menominee 55901). Combos with owner-confirmed
+  COMPLETE membership (15901 and 55901, confirmed by the owner's 2026-07-30
+  email; see ``rpa_geo.load_combinations_2015``) resolve every member here.
+  For VA the owner's own ``GEOID_RECODES`` confirms only the principal
+  county of each combo, so the 31 codes whose membership is NOT
+  owner-confirmed (28 VA independent cities, La Paz 04012, Cibola 35006,
+  Broomfield 08014 -- all younger than, or absorbed by, the
   constant-geography panel) are flagged ``membership_2015_unknown``, not
-  guessed. Getting that membership list from the owner is the known
+  guessed. Getting the VA city membership from the owner is the known
   remaining gap.
 
 This is the crosswalk to use when feeding current-GEOID-keyed outputs
@@ -50,7 +52,7 @@ from typing import Literal
 
 import rpa_geo
 from rpa_geo import contracts
-from rpa_geo.canon import HistoryEdge, data_path
+from rpa_geo.canon import data_path
 
 Status = Literal[
     "identity",  # same GEOID in the 2015 scheme and canonical 2025
@@ -100,18 +102,19 @@ RENAMED_IN_2015_SCHEME: dict[str, str] = {
 # canonical table against the live cid2 universe (importable19.xlsx,
 # 2026-07-16). BEA's county-combination definitions suggest where each
 # belongs (e.g. each VA independent city into its adjacent county's 519xx
-# combo, Kalawao into 15901, Shawano into 55901, La Paz into Yuma, Cibola
-# into Valencia; Broomfield didn't exist before 2001 and spans parts of four
-# 2015 counties) -- but none of that is confirmed by the owner's files, so
-# every one is flagged instead of guessed. Resolving these needs a third
-# crosswalk file (or explicit confirmation) from the owner.
+# combo, La Paz into Yuma, Cibola into Valencia; Broomfield didn't exist
+# before 2001 and spans parts of four 2015 counties) -- but none of that is
+# confirmed by the owner's files, so every one is flagged instead of
+# guessed. Resolving these needs explicit confirmation from the owner.
+# Kalawao 15005 and Shawano 55115 used to be here; the owner's 2026-07-30
+# email confirmed their combos' complete membership (15901 = Maui+Kalawao,
+# 55901 = Shawano+Menominee), so they now resolve as combo members via
+# rpa_geo.load_combinations_2015.
 MEMBERSHIP_2015_UNKNOWN: frozenset[str] = frozenset(
     {
         "04012",  # La Paz, AZ (created 1983)
         "08014",  # Broomfield, CO (created 2001, from parts of 4 counties)
-        "15005",  # Kalawao, HI
         "35006",  # Cibola, NM (created 1981)
-        "55115",  # Shawano, WI
         # VA independent cities absent from the live cid2 universe:
         "51520",
         "51530",
@@ -164,22 +167,28 @@ def _link_rows() -> dict[str, tuple[dict[str, str], ...]]:
 
 
 @lru_cache(maxsize=1)
-def _combo_by_member() -> dict[str, HistoryEdge]:
-    """Owner-confirmed combination membership: current GEOID -> its combo edge.
+def _combo_by_member() -> dict[str, tuple[str, str]]:
+    """Owner-confirmed combination membership: current GEOID -> (combo, note).
 
-    The ``downscaling_cid2_specific`` history edges map each combo code to
-    its principal current county (e.g. 51901 -> 51003); reversed, they say
-    which combo consumes that county's value. The direction is additionally
-    confirmed by the downscaling repo's own ``GEOID_RECODES`` (which maps
-    current -> combo for exactly these codes). After the 02231 edge's
-    supersession there are no AK edges left in this set -- AK membership
-    comes from census2015_link.csv instead.
+    Two sources, merged. The ``downscaling_cid2_specific`` history edges map
+    each VA combo code to its principal current county (e.g. 51901 -> 51003);
+    reversed, they say which combo consumes that county's value -- a
+    direction additionally confirmed by the downscaling repo's own
+    ``GEOID_RECODES``. Combos with owner-confirmed COMPLETE membership
+    (15901, 55901 -- see ``rpa_geo.load_combinations_2015``) contribute every
+    member, not just the principal. After the 02231 edge's supersession
+    there are no AK edges left in this set -- AK membership comes from
+    census2015_link.csv instead.
     """
-    return {
-        edge.canonical_geoid: edge
+    members = {
+        edge.canonical_geoid: (edge.legacy_geoid, edge.note)
         for edge in rpa_geo.load_history_edges().values()
         if edge.source == "downscaling_cid2_specific"
     }
+    for combo, rows in rpa_geo.load_combinations_2015().items():
+        for row in rows:
+            members[row.member_geoid_2025] = (combo, row.note)
+    return members
 
 
 @lru_cache(maxsize=1)
@@ -242,12 +251,12 @@ def resolve(geoid_2025: str) -> Resolution:
 
     combo = _combo_by_member().get(geoid_2025)
     if combo is not None:
+        combo_code, combo_note = combo
         return Resolution(
             geoid_2025,
             "combo_member",
-            (combo.legacy_geoid,),
-            f"Owner-confirmed member of combination code {combo.legacy_geoid}: "
-            f"{combo.note}",
+            (combo_code,),
+            f"Owner-confirmed member of combination code {combo_code}: {combo_note}",
         )
 
     if geoid_2025 in MEMBERSHIP_2015_UNKNOWN:
@@ -390,10 +399,21 @@ def from_2015(geoid_2015: str) -> Location2015:
             "Census renamed this county -- read the current code's value.",
         )
 
+    confirmed_combo = rpa_geo.load_combinations_2015().get(geoid_2015)
+    if confirmed_combo:
+        return Location2015(
+            geoid_2015,
+            "combo",
+            tuple(m.member_geoid_2025 for m in confirmed_combo),
+            "Owner-confirmed COMPLETE membership (2026-07-30), principal "
+            "first -- aggregate these counties' values; the owner splits the "
+            "combined values apart by population share in his own code.",
+        )
+
     combo_members = tuple(
         member
-        for member, edge in _combo_by_member().items()
-        if edge.legacy_geoid == geoid_2015
+        for member, (combo_code, _) in _combo_by_member().items()
+        if combo_code == geoid_2015
     )
     if combo_members:
         return Location2015(
@@ -437,7 +457,7 @@ def validate_universe(
     """Raise if any current GEOID resolves outside ``allow`` -- see rpa_geo.contracts.
 
     Call this on the county universe of an output you're about to hand to
-    the 2015-keyed Stata models. With the default ``allow``, the 33
+    the 2015-keyed Stata models. With the default ``allow``, the 31
     ``membership_2015_unknown`` codes (and MP's ``territory_unmodeled``)
     fail loudly -- appropriate, because e.g. VA's coastal independent cities
     genuinely have nowhere confirmed to go yet.

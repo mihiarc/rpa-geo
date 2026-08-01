@@ -70,7 +70,9 @@ def test_out_of_scope_registry_flags_marshall_and_wake():
 def test_every_history_edge_target_is_a_real_canonical_county():
     counties = rpa_geo.load_counties()
     edges = rpa_geo.load_history_edges()
-    assert len(edges) == 30
+    # 30 until 2026-07-30, when the owner confirmed 15901/55901 as two-member
+    # combined reporting units -- those edges moved to combinations_2015.csv.
+    assert len(edges) == 28
     for edge in edges.values():
         assert edge.canonical_geoid in counties, (
             f"{edge.legacy_geoid} -> {edge.canonical_geoid} is not canonical"
@@ -92,3 +94,22 @@ def test_canonical_geoid_resolves_known_history_edges():
 
 def test_canonical_geoid_unknown_returns_none():
     assert rpa_geo.canonical_geoid("99999") is None
+
+
+def test_combinations_2015_membership_is_complete_and_well_formed():
+    counties = rpa_geo.load_counties()
+    combos = rpa_geo.load_combinations_2015()
+    # Exactly the two units the owner confirmed on 2026-07-30.
+    assert {
+        c: {m.member_geoid_2025 for m in members} for c, members in combos.items()
+    } == {
+        "15901": {"15009", "15005"},
+        "55901": {"55115", "55078"},
+    }
+    for combo, members in combos.items():
+        # combo codes are scheme-internal, never canonical; members always are
+        assert combo not in counties
+        assert all(m.member_geoid_2025 in counties for m in members)
+        # exactly one principal per combo, ordered first
+        assert sum(m.principal for m in members) == 1
+        assert members[0].principal

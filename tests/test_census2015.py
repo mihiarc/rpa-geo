@@ -161,6 +161,28 @@ def test_va_combo_principals_resolve_to_their_combo():
     assert resolve("55078").geoids_2015 == ("55901",)  # Menominee
 
 
+def test_confirmed_combo_minor_members_resolve_too():
+    # Owner-confirmed 2026-07-30: 15901 = Maui + Kalawao, 55901 = Shawano +
+    # Menominee. Kalawao and Shawano were membership_2015_unknown before that.
+    for member, combo in (("15005", "15901"), ("55115", "55901")):
+        r = resolve(member)
+        assert r.status == "combo_member"
+        assert r.geoids_2015 == (combo,)
+    assert "15005" not in MEMBERSHIP_2015_UNKNOWN
+    assert "55115" not in MEMBERSHIP_2015_UNKNOWN
+
+
+def test_confirmed_combos_from_2015_return_complete_membership():
+    for combo, members in (
+        ("15901", {"15009", "15005"}),
+        ("55901", {"55115", "55078"}),
+    ):
+        loc = from_2015(combo)
+        assert loc.kind == "combo"
+        assert set(loc.geoids_2025) == members
+        assert "complete" in loc.note.lower()
+
+
 def test_membership_unknown_codes_are_flagged_not_guessed():
     assert "51540" in MEMBERSHIP_2015_UNKNOWN  # Charlottesville
     for geoid in MEMBERSHIP_2015_UNKNOWN:

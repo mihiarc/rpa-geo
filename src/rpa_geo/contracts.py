@@ -30,6 +30,7 @@ Category = Literal[
     "direct",  # already the canonical GEOID
     "history_edge",  # 1:1 legacy code
     "split_allocation",  # one predecessor -> several successors, with weights (CT- or AK-style)
+    "combination_membership",  # owner-confirmed combined reporting unit -> member counties, no weights (basis is the consumer's choice)
     "territory_fanout",  # a Pacific placeholder that can't collapse to one GEOID, no weights yet
     "out_of_scope",  # correctly recognized as not real Census geography
     "inert_placeholder",  # correctly recognized as an unused/empty code, safe to ignore
@@ -38,15 +39,19 @@ Category = Literal[
 
 # Categories a repo can treat as "cleanly handled" without a human in the
 # loop -- everything here is either fully resolved (direct/history_edge/
-# split_allocation) or correctly and knowingly excluded (out_of_scope/
-# inert_placeholder). territory_fanout and unresolved_needs_review are live
-# gaps -- no weights exist yet, or resolve() genuinely doesn't know -- and
-# are deliberately left out of this default.
+# split_allocation/combination_membership -- the last has no weights, but
+# that's a documented design choice, not a gap: membership is complete and
+# the weight basis is the consumer's) or correctly and knowingly excluded
+# (out_of_scope/inert_placeholder). territory_fanout and
+# unresolved_needs_review are live gaps -- no weights exist yet, or
+# resolve() genuinely doesn't know -- and are deliberately left out of this
+# default.
 RESOLVED_CATEGORIES: frozenset[Category] = frozenset(
     {
         "direct",
         "history_edge",
         "split_allocation",
+        "combination_membership",
         "out_of_scope",
         "inert_placeholder",
     }
@@ -63,6 +68,7 @@ STATUS_CATEGORY: dict[str, Category] = {
     "history_edge": "history_edge",
     "unresolved": "unresolved_needs_review",
     # downscaling_cid2-specific
+    "combination": "combination_membership",
     "ct_allocation": "split_allocation",
     "ak_split_allocation": "split_allocation",
     "pacific_1to1": "direct",  # Guam: a placeholder code, but a clean 1:1 resolution
