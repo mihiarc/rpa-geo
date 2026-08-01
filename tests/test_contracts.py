@@ -29,6 +29,7 @@ def test_category_raises_on_unregistered_status():
     [
         ("direct", "direct"),
         ("history_edge", "history_edge"),
+        ("combination", "combination_membership"),
         ("ct_allocation", "split_allocation"),
         ("ak_split_allocation", "split_allocation"),
         ("pacific_1to1", "direct"),

@@ -1,0 +1,5 @@
+combo_2015,member_geoid_2025,principal,state,note,source
+15901,15009,1,HI,"Maui County, the principal member of the BEA-style Maui + Kalawao combined reporting unit. Membership confirmed by the owner (J. Prestemon, email 2026-07-30): 'Maui + Kalawao combined reporting unit 15901'.",owner_email_2026-07-30
+15901,15005,0,HI,"Kalawao County (82 people, 12 sq mi per the owner). BEA reports it combined with Maui because it is so small; the owner splits the combined values apart by population share in his own code.",owner_email_2026-07-30
+55901,55115,1,WI,"Shawano County, the principal member of the BEA-style Menominee + Shawano combined reporting unit (Menominee is ~10% of Shawano's population per the owner). Confirms the 2026-07-16 BEA evidence that 55901 covers BOTH counties, not Menominee alone.",owner_email_2026-07-30
+55901,55078,0,WI,"Menominee County. Previously the sole history-edge target of 55901; the owner's 2026-07-30 email ('Menominee + Shawano combined reporting unit 55901') confirms the unit covers Shawano too, superseding that 1:1 edge.",owner_email_2026-07-30

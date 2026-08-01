@@ -37,6 +37,22 @@ def test_history_edge():
     assert r.canonical_geoids == ("46102",)
 
 
+@pytest.mark.parametrize(
+    ("cid2", "expected_members"),
+    [
+        ("15901", ("15009", "15005")),  # Maui + Kalawao, principal first
+        ("55901", ("55115", "55078")),  # Shawano + Menominee, principal first
+    ],
+)
+def test_combined_reporting_units_fan_out_to_all_members(cid2, expected_members):
+    # Owner-confirmed 2026-07-30. Membership only -- no shares by design; the
+    # allocation basis is the consumer's choice.
+    r = resolve(cid2)
+    assert r.status == "combination"
+    assert r.canonical_geoids == expected_members
+    assert r.shares is None
+
+
 def test_ct_old_county_allocation():
     r = resolve("09001")
     assert r.status == "ct_allocation"
@@ -110,11 +126,35 @@ def test_inert_ak_remainder_placeholder():
 
 
 def test_deep_legacy_ak_code_resolved_per_owner_decision():
-    # Settled 2026-07-13: the downscaling owner directed 02231
-    # ("Skagway-Yakutat-Angoon") -> Hoonah-Angoon (02105), now a history edge.
+    # First settled 2026-07-13 as a 1:1 edge to Hoonah-Angoon, then superseded
+    # 2026-07-16 by the owner's Alaska_locations_final.xlsx: 02231
+    # ("Skagway-Yakutat-Angoon") is the full three-way aggregate.
     r = resolve("02231")
-    assert r.status == "history_edge"
-    assert r.canonical_geoids == ("02105",)
+    assert r.status == "ak_split_allocation"
+    assert set(r.canonical_geoids) == {"02230", "02282", "02105"}
+    assert r.shares is not None
+    assert sum(r.shares) == pytest.approx(1.0, abs=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("cid2", "expected_members"),
+    [
+        ("02070", {"02070", "02164"}),  # Dillingham + Lake and Peninsula
+        ("02290", {"02290", "02068"}),  # Yukon-Koyukuk + Denali
+    ],
+)
+def test_ak_codes_that_are_also_current_geoids_resolve_as_aggregates(
+    cid2, expected_members
+):
+    # Per the owner's Alaska_locations_final.xlsx (2026-07-16), these cid2
+    # codes mean the pre-1989/1990 combined areas, even though the same GEOIDs
+    # still exist today with smaller boundaries -- so they must fan out, not
+    # pass through as direct.
+    r = resolve(cid2)
+    assert r.status == "ak_split_allocation"
+    assert set(r.canonical_geoids) == expected_members
+    assert r.shares is not None
+    assert sum(r.shares) == pytest.approx(1.0, abs=1e-4)
 
 
 def test_unknown_code_flagged_for_review():
@@ -158,6 +198,9 @@ def test_every_live_cid2_value_resolves_to_a_known_status():
             assert all(g in counties for g in r.canonical_geoids)
             assert r.shares is not None
             assert sum(r.shares) == pytest.approx(1.0, abs=1e-4)
+        elif r.status == "combination":
+            assert all(g in counties for g in r.canonical_geoids)
+            assert r.shares is None  # membership only; basis is the consumer's
         elif r.status == "pacific_unresolved":
             assert all(g in counties for g in r.canonical_geoids)
         # out_of_scope / inert_placeholder: no canonical_geoids expected

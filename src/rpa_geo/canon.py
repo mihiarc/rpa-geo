@@ -72,6 +72,29 @@ class HistoryEdge:
 
 
 @dataclass(frozen=True, slots=True)
+class Combination2015:
+    """One member of an owner-confirmed BEA-style combined reporting unit.
+
+    The 2015-vintage scheme used by J. Prestemon's Stata models carries a few
+    9xx codes whose value covers SEVERAL current counties combined (BEA-style
+    combined reporting). Unlike a ``HistoryEdge`` (structurally 1:1) or a
+    ``Split`` (weighted allocation), a combination states *membership only* --
+    the allocation basis (population, income, land area) is the consumer's
+    choice, and the owner splits these apart by population share in his own
+    code. Only combinations whose complete membership the owner has confirmed
+    live here; VA's 24 county+city combos stay as principal-only history
+    edges until he confirms which city belongs to which combo.
+    """
+
+    combo_2015: str
+    member_geoid_2025: str
+    principal: bool
+    state: str
+    note: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class OutOfScopeCode:
     code: str
     label: str
@@ -117,6 +140,32 @@ def load_counties(vintage: str = LATEST_VINTAGE) -> dict[str, County]:
             is_territory=row["is_territory"] == "True",
         )
     return counties
+
+
+@lru_cache(maxsize=1)
+def load_combinations_2015() -> dict[str, tuple[Combination2015, ...]]:
+    """Owner-confirmed combined-reporting-unit membership, keyed by combo code.
+
+    Members are ordered principal first. Every combo here has its COMPLETE
+    membership confirmed by the owner (see each row's ``source``); a combo
+    with only its principal member known does not belong in this table.
+    """
+    combos: dict[str, list[Combination2015]] = {}
+    for row in _read_csv("combinations_2015.csv"):
+        combos.setdefault(row["combo_2015"], []).append(
+            Combination2015(
+                combo_2015=row["combo_2015"],
+                member_geoid_2025=row["member_geoid_2025"],
+                principal=row["principal"] == "1",
+                state=row["state"],
+                note=row["note"],
+                source=row["source"],
+            )
+        )
+    return {
+        combo: tuple(sorted(members, key=lambda m: not m.principal))
+        for combo, members in combos.items()
+    }
 
 
 @lru_cache(maxsize=1)

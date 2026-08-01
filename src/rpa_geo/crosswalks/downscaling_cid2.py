@@ -7,8 +7,21 @@ projected Excel files -- 3,197 distinct values as of 2026-07) to one of:
 
 - a single canonical GEOID (most counties: cid2 already equals it, or a
   ``rpa_geo.history_edges`` 1:1 edge applies)
-- an allocation across several canonical GEOIDs (CT's old counties, three AK
-  Census Area splits -- see ``rpa_geo.splits``)
+- an owner-confirmed BEA-style combined reporting unit -> its member counties
+  (Maui+Kalawao 15901, Shawano+Menominee 55901; confirmed by the owner
+  2026-07-30 -- see ``rpa_geo.load_combinations_2015``). Membership only, no
+  shares: the allocation basis is the consumer's choice (the owner splits
+  these by population share in his own code). VA's 24 county+city combos are
+  NOT here yet -- their city membership is unconfirmed, so they still resolve
+  1:1 to the principal county via history edges.
+- an allocation across several canonical GEOIDs (CT's old counties, six AK
+  cases -- see ``rpa_geo.splits``. Three of those were established by the
+  owner's ``Alaska_locations_final.xlsx``, received 2026-07-16, which defines
+  his 24 AK locations authoritatively: 02231 is the three-way
+  Skagway+Yakutat+Hoonah-Angoon aggregate, and 02070/02290 include Lake and
+  Peninsula/Denali respectively even though those two codes are *also*
+  current GEOIDs with smaller boundaries. That file supersedes the
+  2026-07-13 instruction that mapped 02231 1:1 to Hoonah-Angoon.)
 - a Pacific placeholder resolved 1:1 (Guam -> 66010)
 - a knowingly-dropped code (American Samoa: the downscaling owner elected not
   to model the territory on 2026-07-13; Marshall Islands / Wake Island are out
@@ -35,6 +48,7 @@ from rpa_geo.splits import OLD_CT_COUNTY_FIPS
 Status = Literal[
     "direct",  # cid2 IS the canonical GEOID already
     "history_edge",  # 1:1 legacy code, resolved via rpa_geo.history_edges
+    "combination",  # owner-confirmed combined reporting unit -> member counties, no shares
     "ct_allocation",  # CT's old 8 counties -> new 9 planning regions
     "ak_split_allocation",  # AK Census Area retirement/split
     "pacific_1to1",  # Guam: cid2 placeholder resolves cleanly to one canonical GEOID
@@ -50,15 +64,19 @@ class Resolution:
     cid2: str
     status: Status
     canonical_geoids: tuple[str, ...]  # empty for out_of_scope/inert/unresolved
-    shares: tuple[float, ...] | None  # None unless status is an allocation
+    shares: tuple[float, ...] | None  # None unless status is an allocation; also
+    # None for "combination" -- membership is confirmed but the weight basis
+    # (population/income/area) is deliberately left to the consumer
     note: str
 
 
 # cid2 values this module cannot responsibly resolve without input from the
 # downscaling repo's owner. Currently empty: the one former entry, "02231"
-# ("Skagway-Yakutat-Angoon Census Area"), was resolved on 2026-07-13 when the
-# repo owner (J. Prestemon) directed mapping it to Hoonah-Angoon (02105) -- now
-# a downscaling_cid2_specific edge in history_edges.csv. A genuinely
+# ("Skagway-Yakutat-Angoon Census Area"), was first resolved 1:1 to
+# Hoonah-Angoon per a 2026-07-13 owner instruction, then superseded on
+# 2026-07-16 by the owner's Alaska_locations_final.xlsx, which defines it as
+# the full Skagway+Yakutat+Hoonah-Angoon aggregate -- now an
+# AK_skagway_yakutat_angoon_1992 split in historical_splits.csv. A genuinely
 # unresolvable code gets added back here (resolve() also has a catch-all).
 UNRESOLVED_CID2: dict[str, str] = {}
 
@@ -103,6 +121,19 @@ def resolve(cid2: str) -> Resolution:
             tuple(s.successor_geoid for s in splits),
             tuple(s.share_of_predecessor for s in splits),
             "Connecticut's old-county-to-planning-region switch (2022); see rpa_geo.splits for methodology.",
+        )
+
+    combo = rpa_geo.load_combinations_2015().get(cid2)
+    if combo:
+        return Resolution(
+            cid2,
+            "combination",
+            tuple(m.member_geoid_2025 for m in combo),
+            None,
+            "Owner-confirmed combined reporting unit (J. Prestemon, 2026-07-30): "
+            "the cid2 value covers all listed member counties (principal first). "
+            "No shares here by design -- the allocation basis (population, "
+            "income, land area) is the consumer's choice.",
         )
 
     ak_splits = rpa_geo.resolve_predecessor(cid2)

@@ -30,6 +30,7 @@ Category = Literal[
     "direct",  # already the canonical GEOID
     "history_edge",  # 1:1 legacy code
     "split_allocation",  # one predecessor -> several successors, with weights (CT- or AK-style)
+    "combination_membership",  # owner-confirmed combined reporting unit -> member counties, no weights (basis is the consumer's choice)
     "territory_fanout",  # a Pacific placeholder that can't collapse to one GEOID, no weights yet
     "out_of_scope",  # correctly recognized as not real Census geography
     "inert_placeholder",  # correctly recognized as an unused/empty code, safe to ignore
@@ -38,15 +39,19 @@ Category = Literal[
 
 # Categories a repo can treat as "cleanly handled" without a human in the
 # loop -- everything here is either fully resolved (direct/history_edge/
-# split_allocation) or correctly and knowingly excluded (out_of_scope/
-# inert_placeholder). territory_fanout and unresolved_needs_review are live
-# gaps -- no weights exist yet, or resolve() genuinely doesn't know -- and
-# are deliberately left out of this default.
+# split_allocation/combination_membership -- the last has no weights, but
+# that's a documented design choice, not a gap: membership is complete and
+# the weight basis is the consumer's) or correctly and knowingly excluded
+# (out_of_scope/inert_placeholder). territory_fanout and
+# unresolved_needs_review are live gaps -- no weights exist yet, or
+# resolve() genuinely doesn't know -- and are deliberately left out of this
+# default.
 RESOLVED_CATEGORIES: frozenset[Category] = frozenset(
     {
         "direct",
         "history_edge",
         "split_allocation",
+        "combination_membership",
         "out_of_scope",
         "inert_placeholder",
     }
@@ -63,6 +68,7 @@ STATUS_CATEGORY: dict[str, Category] = {
     "history_edge": "history_edge",
     "unresolved": "unresolved_needs_review",
     # downscaling_cid2-specific
+    "combination": "combination_membership",
     "ct_allocation": "split_allocation",
     "ak_split_allocation": "split_allocation",
     "pacific_1to1": "direct",  # Guam: a placeholder code, but a clean 1:1 resolution
@@ -74,6 +80,18 @@ STATUS_CATEGORY: dict[str, Category] = {
     "ct_duplicate_direct": "unresolved_needs_review",  # double-count risk, needs a human despite the name
     "out_of_scope_by_design": "out_of_scope",
     "out_of_scope_but_present": "unresolved_needs_review",  # contradicts the repo's own design
+    # census2015-specific (current 2025 GEOID -> the 2015-vintage scheme)
+    "identity": "direct",
+    "renamed": "history_edge",
+    "ak_aggregate_member": "history_edge",  # 1:1 from this key's side: one owner-defined location consumes it
+    "ct_owner_assignment": "split_allocation",  # 1-2 old counties read the region's value (replicated, no weights)
+    "ct_owner_unassigned": "inert_placeholder",  # deliberately unconsumed per the owner's final choices
+    "combo_member": "history_edge",
+    "membership_2015_unknown": "unresolved_needs_review",  # combination membership not owner-confirmed
+    "owner_excluded": "inert_placeholder",
+    "pacific_placeholder": "direct",  # mirrors pacific_1to1: placeholder code, clean 1:1
+    "territory_unmodeled": "unresolved_needs_review",
+    "not_canonical_2025": "unresolved_needs_review",
 }
 
 
