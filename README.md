@@ -10,8 +10,7 @@ canonical reference at its own pace via the crosswalk built for it.
 
 ## Canonical reference
 
-- **Vintage:** Census TIGER/Line 2025 (current release as of this writing),
-  sourced from the generalized `cb_2025_us_county_500k` cartographic
+- **Vintage:** Census TIGER/Line 2025, sourced from the generalized `cb_2025_us_county_500k` cartographic
   boundary file (attributes only -- no geometry is shipped).
 - **Scope:** the Census Bureau's full "counties and equivalents" universe --
   50 states + DC + Puerto Rico + US Virgin Islands + Guam + American Samoa +
@@ -21,8 +20,8 @@ canonical reference at its own pace via the crosswalk built for it.
 - **Key:** `geoid`, the current 5-digit Census FIPS/GEOID string.
 
 Vintages are shipped **side-by-side**, not overwritten in place --
-`counties_2025.csv` today, `counties_2031.csv` alongside it once TIGER-2031+
-is onboarded, and so on. `rpa_geo.load_counties()` defaults to
+`counties_2025.csv` holds the 2025 vintage and a later one is added as
+`counties_YYYY.csv` alongside it. `rpa_geo.load_counties()` defaults to
 `rpa_geo.LATEST_VINTAGE`, but takes an explicit `vintage=` argument, and
 `rpa_geo.available_vintages()` discovers every vintage this package version
 ships (from the `counties_*.csv` filenames present -- no per-vintage code
@@ -36,10 +35,10 @@ below for how a new one gets added.
 | File | Contents |
 |---|---|
 | `counties_2025.csv` | The canonical reference table for the 2025 vintage: one row per current county/equivalent, with `is_conus` and `is_territory` flags. A future vintage bump adds `counties_YYYY.csv` alongside this file, not in place of it. |
-| `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 28 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "A direction bug we caught" below) -- don't assume the naive higher-number-is-older pattern holds. |
-| `historical_splits.csv` | GEOIDs that don't map 1:1 to canonical -- they were divided among several current counties, so there's only an allocation, not a single answer. Seven cases, 32 rows: Connecticut's 2022 planning-region switch (many-to-many, 19 rows, weighted both by town land area *and* by 2020 town population -- see below) and six Alaska cases, each weighted by the current land area of its successors: three Census Area retirements (Wrangell-Petersburg 2008, Skagway-Hoonah-Angoon 2007, Valdez-Cordova 2019), the deeper Skagway-Yakutat-Angoon retirement (1992, expressed directly against its three *current* successors), and two boundary-shrink cases where **the predecessor code is also a current GEOID** (Dillingham 02070 lost Lake and Peninsula in 1989; Yukon-Koyukuk 02290 lost Denali in 1990) -- on current-vintage data those two codes are ordinary counties and must not be fanned out; the split rows describe the pre-shrink combined areas, which is what rpa-socioeconomic-downscaling's `cid2` means by them per the owner's `Alaska_locations_final.xlsx` (2026-07-16). |
-| `combinations_2015.csv` | BEA-style combined reporting units in the 2015 scheme whose **complete** membership the owner has confirmed -- currently 15901 (Maui + Kalawao) and 55901 (Shawano + Menominee), both confirmed by J. Prestemon's 2026-07-30 email. Unlike a history edge (1:1) or a split (weighted allocation), a combination states membership only, principal first; the allocation basis is the consumer's choice (the owner splits these by population share in his own code). VA's 24 county+city combos stay as principal-only history edges until he confirms the city membership. Loaded by `rpa_geo.load_combinations_2015()`. |
-| `census2015_link.csv` | The canonical link between current (2025) GEOIDs and the 2015-vintage scheme used by J. Prestemon's Stata econometric models, for the two states where the schemes diverge structurally (AK 30 rows, CT 10 rows). Converted from the owner's two final crosswalk files (received 2026-07-16, archived at `~/Data/projects/rpa-geo/`); consumed by `crosswalks/census2015.py` -- see "The canonical 2025 <-> 2015 link" below. |
+| `history_edges.csv` | 1:1 edges from a prior/legacy GEOID to its current canonical GEOID -- 28 edges. Each is tagged in its `source` column: `census_official` (a genuine, individually verified Census Bureau rename/renumbering -- see each note for the specific citation), `census_official_approximate` (a genuine Census change involving small annexed slivers this package doesn't allocate -- see the note), or `downscaling_cid2_specific` (a code that's only known to be used internally by rpa-socioeconomic-downscaling's `cid2` scheme; **not** a verified retired Census FIPS). Directions were verified one at a time against real data (see "GEOID rename directions" below) -- don't assume the naive higher-number-is-older pattern holds. |
+| `historical_splits.csv` | GEOIDs that don't map 1:1 to canonical -- they were divided among several current counties, so there's only an allocation, not a single answer. Seven cases, 32 rows: Connecticut's 2022 planning-region switch (many-to-many, 19 rows, weighted both by town land area *and* by 2020 town population -- see below) and six Alaska cases, each weighted by the current land area of its successors: three Census Area retirements (Wrangell-Petersburg 2008, Skagway-Hoonah-Angoon 2007, Valdez-Cordova 2019), the deeper Skagway-Yakutat-Angoon retirement (1992, expressed directly against its three *current* successors), and two boundary-shrink cases where **the predecessor code is also a current GEOID** (Dillingham 02070 lost Lake and Peninsula in 1989; Yukon-Koyukuk 02290 lost Denali in 1990) -- on current-vintage data those two codes are ordinary counties and must not be fanned out; the split rows describe the pre-shrink combined areas, which is what rpa-socioeconomic-downscaling's `cid2` means by them per the owner's `Alaska_locations_final.xlsx`. |
+| `combinations_2015.csv` | BEA-style combined reporting units in the 2015 scheme whose **complete** membership the owner has confirmed: 15901 (Maui + Kalawao) and 55901 (Shawano + Menominee), both confirmed by J. Prestemon. Unlike a history edge (1:1) or a split (weighted allocation), a combination states membership only, principal first; the allocation basis is the consumer's choice (the owner splits these by population share in his own code). VA's 24 county+city combos stay as principal-only history edges until he confirms the city membership. Loaded by `rpa_geo.load_combinations_2015()`. |
+| `census2015_link.csv` | The canonical link between current (2025) GEOIDs and the 2015-vintage scheme used by J. Prestemon's Stata econometric models, for the two states where the schemes diverge structurally (AK 30 rows, CT 10 rows). Converted from the owner's two final crosswalk files (archived at `~/Data/projects/rpa-geo/`); consumed by `crosswalks/census2015.py` -- see "The canonical 2025 <-> 2015 link" below. |
 | `locations_2015_ak.csv` | The owner's 24 Alaska model locations with his attributes (name as he wrote it, `coastal` flag, Census interior point). The source file's `_CX`/`_CY` centroid columns were dropped: they're an antimeridian artifact for Aleutians West (a centroid in the eastern hemisphere); the interior-point columns handle the antimeridian correctly (positive longitude). |
 | `out_of_scope.csv` | Codes seen in the wild that are not real Census geography at all, with the reason (Marshall Islands, Wake Island). |
 
@@ -60,60 +59,53 @@ so consumers pick whichever is appropriate for what they're allocating:
 
 Both share sets independently sum to 1.0 per predecessor and per successor
 (validated in `tests/test_splits.py`). Neither is more "canonical" than the
-other -- `Split.share_of_predecessor` never silently changed meaning; a new,
-separate field was added instead, specifically so an existing consumer
-reading the area columns (`landuse2030_fips.py`) wouldn't have its
-methodology altered by a change made for a different consumer's needs.
+other: `Split.share_of_predecessor` is always the area share, and the
+population share is a separate field, so a consumer reading the area
+columns (`landuse2030_fips.py`) is unaffected by the population ones.
 
 CT's population weights use the same CT-Data-Collaborative town-level
 crosswalk as the area weights, reweighted by each town's 2020 Census total
 population (P.L. 94-171 Redistricting File, `POP100` field). That file is
-downloaded unauthenticated from `www2.census.gov`'s bulk data mirror (not
-the `api.census.gov` REST API, which does still require a key per the note
-below) -- so no `CENSUS_API_KEY` was needed for this after all.
+downloaded unauthenticated from `www2.census.gov`'s bulk data mirror, so
+no `CENSUS_API_KEY` is needed.
 
-AK's six splits remain **area-only, deliberately deferred**: unlike CT's
+AK's six splits remain **area-only**: unlike CT's
 town-level crosswalk (built for a *current*, static set of towns), AK's
 predecessors are retired Census Areas -- apportioning their population would
 require town/place-level 2020 population spatially joined against the
 *historical* boundary, not just today's successor boundaries. That's
-meaningfully harder and no downstream consumer has asked for it, so it's
-left undone and documented (see each AK row's `note`) rather than guessed.
+meaningfully harder, so AK population weights are left out and documented
+(see each AK row's `note`) instead of guessed.
 
-Historical note: `api.census.gov`, the Census Bureau's REST API, now
-rejects unauthenticated requests and requires a key (`CENSUS_API_KEY` env
-var, never hardcoded, if a future case needs it). That's a separate system
-from the bulk `www2.census.gov` file downloads used here.
+`api.census.gov`, the Census Bureau's REST API, rejects unauthenticated
+requests and requires a key (`CENSUS_API_KEY` env var, never hardcoded, if a
+case needs it). It is a separate system from the bulk `www2.census.gov`
+file downloads used here.
 
-## A direction bug we caught by validating against real data
+## GEOID rename directions
 
-Shannon County, SD was renamed Oglala Lakota County in 2015 -- but the FIPS
-code moved from **46113 down to 46102**, the reverse of every other
-rename in this package (Wade Hampton -> Kusilvak went 02270 -> 02158, a
-higher-to-lower-looking but actually just "old code retired, new code
-assigned" change with no numeric pattern to lean on). Trained-knowledge
-recall got this backwards on the first pass; it was only caught by
-round-tripping rpa-socioeconomic-downscaling's actual live `cid2` values
-against this package's data and finding `46113` unresolved when it should
-have resolved cleanly. The lesson generalizes: don't trust an assumed
-direction for a GEOID rename without checking a primary source (this
-package's history notes cite one per edge) or the consuming repo's live
-data.
+Shannon County, SD was renamed Oglala Lakota County in 2015, and the FIPS
+code moved from **46113 down to 46102**, the reverse of what recall
+suggests (Wade Hampton -> Kusilvak went 02270 -> 02158, an "old code
+retired, new code assigned" change with no numeric pattern to lean on).
+Round-tripping rpa-socioeconomic-downscaling's live `cid2` values against
+this package's data exposes a wrong direction: `46113` stays unresolved.
+Don't trust an assumed direction for a GEOID rename without checking a
+primary source (this package's history notes cite one per edge) or the
+consuming repo's live data.
 
 ## Per-repo crosswalks (`src/rpa_geo/crosswalks/`)
 
-Part of the installable `rpa_geo` package (moved here from a repo-root
-`crosswalks/` directory so a consuming repo's `uv add --editable ../rpa-geo`
-can actually import them, not just this repo's own test suite via a
-`sys.path` hack).
+Part of the installable `rpa_geo` package, so a consuming repo can import
+them.
 
-| Repo | Key | Module | Status |
+| Repo | Key | Module | Notes |
 |---|---|---|---|
-| rpa-socioeconomic-downscaling | `cid2` | `rpa_geo.crosswalks.downscaling_cid2` | All 3,197 live values resolve to an explicit status; 2 flagged for owner review (see findings below). Ships `validate_universe()`. |
+| rpa-socioeconomic-downscaling | `cid2` | `rpa_geo.crosswalks.downscaling_cid2` | Every live value resolves to an explicit status; values needing owner review are flagged (see findings below). Ships `validate_universe()`. |
 | rpa-slr / coastal-land-loss | `county_fips` | `rpa_geo.crosswalks.slr_county_fips` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. Ships `validate_universe()`. |
-| rpa-landuse-2030 | `fips` | `rpa_geo.crosswalks.landuse2030_fips` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). Ships `validate_universe()`. |
-| rpa-data-portal | n/a | `rpa_geo.crosswalks.data_portal_landuse` | Documentation only, no resolve() (and so no `validate_universe()`) -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
-| urban-rents / rpa-slr / coastal-land-loss outputs -> J. Prestemon's Stata models | canonical GEOID -> `cid2` | `rpa_geo.crosswalks.census2015` | The canonical 2025 <-> 2015-scheme link (see the dedicated section below). All but 35 canonical GEOIDs resolve; the 31 `membership_2015_unknown` codes and MP's 4 municipalities are documented gaps awaiting owner input. Ships `validate_universe()`. |
+| rpa-landuse-2030 | `fips` | `rpa_geo.crosswalks.landuse2030_fips` | Every live `georef.csv` value resolves; three known anomalies are guarded (see findings below). Ships `validate_universe()`. |
+| rpa-data-portal | n/a | `rpa_geo.crosswalks.data_portal_landuse` | Documentation only, no resolve() (and so no `validate_universe()`) -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there. |
+| urban-rents / rpa-slr / coastal-land-loss outputs -> J. Prestemon's Stata models | canonical GEOID -> `cid2` | `rpa_geo.crosswalks.census2015` | The canonical 2025 <-> 2015-scheme link (see the dedicated section below). Canonical GEOIDs resolve except the documented gaps (`membership_2015_unknown` codes and MP's municipalities), which need owner input. Ships `validate_universe()`. |
 
 `county-climate` keys on canonical GEOIDs directly and needs no crosswalk.
 
@@ -132,7 +124,7 @@ The 2015 side is the same scheme rpa-socioeconomic-downscaling carries as
 the latter two with complete owner-confirmed membership, see
 `combinations_2015.csv`) and two
 structural divergences defined authoritatively by the owner's two final
-crosswalk files (received 2026-07-16, archived at `~/Data/projects/rpa-geo/`,
+crosswalk files (archived at `~/Data/projects/rpa-geo/`,
 converted to `census2015_link.csv` + `locations_2015_ak.csv`):
 
 - **Alaska** (`Alaska_locations_final.xlsx`): 24 constant-geography
@@ -159,18 +151,16 @@ from rpa_geo.crosswalks.census2015 import resolve, from_2015, validate_universe
 resolve("02164").geoids_2015   # ("02070",) -- aggregate into Dillingham+L&P
 resolve("09110").geoids_2015   # ("09003", "09013") -- replicate to both
 from_2015("02231").geoids_2025 # ("02105", "02230", "02282") -- members to aggregate
-validate_universe(county_geoids_of_an_output)  # fail loud on the 35 documented gaps
+validate_universe(county_geoids_of_an_output)  # fail loud on the documented gaps
 ```
 
-**Known gaps, flagged not guessed** (`membership_2015_unknown`, 31 codes):
+**Known gaps, flagged not guessed** (`membership_2015_unknown`):
 28 VA independent cities, La Paz AZ, Cibola NM, and
 Broomfield CO have no code of their own in the live `cid2` universe and are
 presumably absorbed into a neighboring combination code (BEA's definitions
 suggest where) -- but no owner-provided file confirms the membership, so
-`resolve()` flags them and `validate_universe()` raises. (Kalawao HI and
-Shawano WI left this set on 2026-07-30, when the owner confirmed their
-combos' complete membership -- see `combinations_2015.csv`.) Closing the
-rest needs explicit confirmation from the owner --
+`resolve()` flags them and `validate_universe()` raises. Closing a gap
+needs explicit confirmation from the owner --
 consequential for rpa-slr flows especially, since several of the flagged VA
 cities are coastal (e.g. Poquoson 51735, Williamsburg 51830; the larger
 Hampton Roads cities like Norfolk have their own codes in the scheme and
@@ -209,20 +199,16 @@ none) ships one. Internally, each fine-grained `Status` (e.g.
 shared `Category` values via `rpa_geo.contracts.STATUS_CATEGORY` --
 `direct`, `history_edge`, `split_allocation`, `territory_fanout`,
 `out_of_scope`, `inert_placeholder`, `unresolved_needs_review`. This exists
-because two crosswalks independently hand-rolled near-identical
-allocation/out-of-scope logic under different names; the shared `Category`
-stops a third one from doing it again, without renaming any existing
-`Status` string (nothing outside this package depends on those strings yet,
-but the crosswalks' own tests do, so nothing was renamed to avoid an
-unnecessary breaking change).
+so crosswalks share one vocabulary for allocation and out-of-scope
+logic, without renaming any `Status` string (the crosswalks' own tests
+depend on those strings).
 
 By default, `validate_universe()` allows anything that's fully resolved or
 correctly, knowingly excluded (`direct`, `history_edge`,
 `split_allocation`, `out_of_scope`, `inert_placeholder` --
 `rpa_geo.contracts.RESOLVED_CATEGORIES`) and raises on anything that
 represents a genuine live gap (`territory_fanout`, `unresolved_needs_review`
--- no live cid2 lands in either today, after the `02231` / American Samoa
-resolutions below). A caller who's consciously
+-- a resolved live cid2 lands in neither). A caller who's consciously
 decided to tolerate a specific gap can widen the allowed set explicitly via
 the `allow=` argument -- the default just doesn't make that choice silently.
 
@@ -265,36 +251,33 @@ handles this *shape* of GEOID at all.
 ## Findings surfaced while building these crosswalks
 
 Each of these was caught by validating against a repo's *live* data, not by
-inspection -- the general lesson (see "A direction bug we caught" above)
+inspection -- the general lesson (see "GEOID rename directions" above)
 generalizes across all four:
 
 - **A second real historical gap**: Dade County, FL was renamed Miami-Dade
-  County in 1997 (FIPS 12025 -> 12086) -- found via rpa-landuse-2030's
-  `georef.csv`, not anticipated from the downscaling repo alone. Now in
+  County in 1997 (FIPS 12025 -> 12086), visible in rpa-landuse-2030's
+  `georef.csv` and not in the downscaling repo's. It is in
   `history_edges.csv`.
 - **`cid2=02261` (Valdez-Cordova) isn't in downscaling's `GEOID_RECODES` at
   all.** That list was built against the 2015 TIGER shapefile; Valdez-Cordova
   wasn't split into Chugach (02063) / Copper River (02066) until January
-  2019, so the gap is expected, not a bug in that repo. Now covered by
+  2019, so the gap is expected, not a bug in that repo. It is covered by
   `historical_splits.csv`.
 - **`cid2=02231`** ("Skagway-Yakutat-Angoon Census Area" per
   rpa-socioeconomic-downscaling's own `name` column, populated 1970-2022) is
   a *deeper* legacy code than anything else in this package -- it predates
-  even the 2007 Skagway-Hoonah-Angoon split. It was flagged
-  `unresolved_needs_review`, then mapped 1:1 to Hoonah-Angoon (`02105`) per
-  a 2026-07-13 owner instruction, then **superseded on 2026-07-16** by the
-  owner's `Alaska_locations_final.xlsx`, which defines it as the full
-  three-way Skagway+Yakutat+Hoonah-Angoon aggregate -- now an
-  `AK_skagway_yakutat_angoon_1992` split in `historical_splits.csv` (the
-  composition also matches the genuine Census history: Yakutat split off in
-  1992, the remainder split again in 2007).
+  even the 2007 Skagway-Hoonah-Angoon split. Per the owner's
+  `Alaska_locations_final.xlsx` it is the full three-way
+  Skagway+Yakutat+Hoonah-Angoon aggregate, an `AK_skagway_yakutat_angoon_1992` split in
+  `historical_splits.csv` (the composition also matches the genuine Census
+  history: Yakutat split off in 1992, the remainder split again in 2007).
 - **`cid2=02070` and `cid2=02290` are aggregates, not the current counties
-  their codes match.** Discovered from `Alaska_locations_final.xlsx`
-  (2026-07-16): the owner's 02070 is "Dillingham + Lake and Peninsula"
+  their codes match.** Per `Alaska_locations_final.xlsx`,
+  the owner's 02070 is "Dillingham + Lake and Peninsula"
   (02164 seceded 1989) and his 02290 is "Yukon-Koyukuk + Denali" (02068
   incorporated 1990); both predecessor codes survive as current GEOIDs with
-  smaller boundaries, so the previous `direct` treatment silently dropped
-  Lake and Peninsula and Denali from his scheme. Now
+  smaller boundaries, so treating them as `direct` would silently drop
+  Lake and Peninsula and Denali from his scheme. They are
   `historical_splits.csv` cases; `downscaling_cid2.resolve()` fans them out.
 - **The live downscaling panel double-carries the AK aggregate members with
   inconsistent `dropthis` flags**: standalone series exist for 02105, 02164,
@@ -303,21 +286,16 @@ generalizes across all four:
   02105/02195 are marked `dropthis=1` (02164/02230/02275/02282 are kept,
   which double-counts if summed with their aggregates). That repo's data,
   that owner's call -- pinned in `tests/test_census2015.py` so a change on
-  their side shows up as a test diff here, and worth raising with him.
-- **`cid2=55901` covers Shawano County too, not Menominee alone** --
-  suspected 2026-07-16 (Shawano 55115 absent from the live cid2 universe
-  while 55901 present; BEA defines 55901 as "Shawano (incl. Menominee)"),
-  **confirmed by the owner 2026-07-30** ("Menominee + Shawano combined
-  reporting unit 55901", alongside the same confirmation for Maui + Kalawao
-  15901). Both moved from 1:1 `history_edges.csv` rows to
-  `combinations_2015.csv`; `downscaling_cid2.resolve()` now fans them out to
-  all members (status `combination`, no shares -- the allocation basis is
-  the consumer's choice), and Kalawao/Shawano left
-  `membership_2015_unknown` in `crosswalks/census2015.py`.
+  their side shows up as a test diff here.
+- **`cid2=55901` covers Shawano County too, not Menominee alone**, and
+  `cid2=15901` covers Maui + Kalawao: the owner confirmed both as combined
+  reporting units. They are `combinations_2015.csv` rows, and
+  `downscaling_cid2.resolve()` fans them out to all members (status
+  `combination`, no shares -- the allocation basis is the consumer's choice).
 - **`cid2=74001`** (American Samoa) carries the territory as a single row,
   though Census recognizes five districts (`60010`-`60050`). Rather than fan
   it out without weights, the downscaling owner elected not to model American
-  Samoa (2026-07-13), so it's flagged `inert_placeholder` (knowingly
+  Samoa, so it's flagged `inert_placeholder` (knowingly
   excluded).
 - **`cid2=02999`** ("REMAINDER OF ALASKA", `dropthis=1` and zero non-null
   population rows in the source panel) -- flagged `inert_placeholder`, not
@@ -327,34 +305,26 @@ generalizes across all four:
   Connecticut River Valley 09130 + Southeastern Connecticut 09180, as
   independent rows -- double-counting for anything summing every row without
   deduplicating CT). Flagged `ct_duplicate_direct`, reported upstream as
-  issue #80. **Fixed 2026-07-10** in that repo's PR #86 (dropped at the
-  source in `nri_extractor._create_georef_from_transitions()`) -- verified
-  against the live file; `CT_DUPLICATE_NEW_REGIONS` is now an empty,
-  documented frozenset in `crosswalks/landuse2030_fips.py` so a regression
-  would be caught again automatically.
-- **rpa-landuse-2030's `georef.csv` had 27 non-CONUS rows despite its own
+  issue #80. `CT_DUPLICATE_NEW_REGIONS` in `crosswalks/landuse2030_fips.py` is
+  an empty, documented frozenset so a regression is caught automatically.
+- **rpa-landuse-2030's `georef.csv` carried 27 non-CONUS rows despite its own
   documented CONUS+DC-only design** (`NON_CONUS_STATEFP`): 4 of HI's 5
   counties, 22 of PR's 78 municipios, 1 of VI's 3 islands, zero AK/GU/AS/MP
   -- issue #81 speculated this leaked in via a BEA CAINC1 regional-accounts
-  join (per the `raw/` directory's file names), a theory the fix below
-  neither confirms nor rules out. Flagged `out_of_scope_but_present`,
-  reported upstream as issue #81. **Fixed 2026-07-10** in the same PR #86
-  (CONUS+DC filter added, reusing `geo.py`'s own `NON_CONUS_STATEFP`) --
-  verified against the live file; `UNEXPECTED_NON_CONUS_IN_GEOREF` is now an
+  join (per the `raw/` directory's file names), a theory never confirmed. Flagged `out_of_scope_but_present`,
+  reported upstream as issue #81. `UNEXPECTED_NON_CONUS_IN_GEOREF` is an
   empty, documented frozenset for the same regression-catching reason.
 - **rpa-landuse-2030's `georef.csv` is missing 35 canonical CONUS+DC
-  GEOIDs entirely** -- a differently-shaped anomaly the two fixes above
-  didn't surface, since `resolve()` only ever classifies fips values
+  GEOIDs entirely** -- a differently-shaped anomaly the two
+  anomalies above didn't surface, since `resolve()` only ever classifies fips values
   *present* in the file, never notices one that's absent. Found by diffing
   the full canonical `is_conus` set against the live file: DC (`11001`);
   Denver + Broomfield, CO (consolidated city-and-county governments,
   `08031`/`08014`); St. Louis City, MO (independent of any county,
   `29510`); Arlington County + 30 of Virginia's independent cities. Likely
   a longstanding NRI survey-coverage gap for non-standard
-  county-equivalents (not a PR #86 regression -- see the issue for the
-  reasoning), reported upstream as issue #87. `KNOWN_MISSING_CONUS_GEOIDS`
-  in `crosswalks/landuse2030_fips.py` documents the exact set; not yet
-  fixed upstream.
+  county-equivalents (see the issue for the reasoning), reported upstream as issue #87. `KNOWN_MISSING_CONUS_GEOIDS`
+  in `crosswalks/landuse2030_fips.py` documents the exact set.
 
 ## Onboarding a new repo
 
@@ -405,7 +375,7 @@ the 2030 Census).
    changes between the two vintages, rather than inferring changes from a
    numeric GEOID diff alone. This isn't optional caution -- it's exactly
    the discipline that caught the Shannon-to-Oglala-Lakota direction bug in
-   the current data (see "A direction bug we caught" above): a naive
+   the current data (see "GEOID rename directions" above): a naive
    higher/lower-number heuristic got the rename direction backwards, and
    only checking a primary source caught it.
 3. Classify every GEOID-set delta: unchanged, renamed 1:1 (add to
@@ -414,7 +384,7 @@ the 2030 Census).
    prior split's ratio), or merged many:1. The merge shape needs no schema
    change: `historical_splits.csv`'s row-per-(predecessor, successor) shape
    already generalizes to it (multiple predecessor rows can already point
-   at one successor) -- it's simply unexercised by any real case so far.
+   at one successor) -- no current case exercises it.
 4. Extend, don't overwrite, `history_edges.csv` / `historical_splits.csv`
    with the new interval's edges, each citing its primary source the way
    every existing edge already does.
@@ -432,7 +402,7 @@ the 2030 Census).
 Add as a dependency from a consuming repo by pinning a released tag in `[tool.uv.sources]`:
 
 ```toml
-rpa-geo = { git = "https://github.com/mihiarc/rpa-geo.git", tag = "v0.4.0" }
+rpa-geo = { git = "https://github.com/mihiarc/rpa-geo.git", tag = "<released tag>" }
 ```
 
 Use `uv add --editable ../rpa-geo` only when developing rpa-geo itself.
