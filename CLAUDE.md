@@ -11,7 +11,7 @@ table and the findings write-ups. This file is the orientation layer.
 
 - **`counties_2025.csv`** — the join target. Census TIGER 2025, 3,235 rows, keyed on 5-digit
   `geoid`, with `is_conus` / `is_territory` flags.
-- **`history_edges.csv`** — 30 1:1 edges from a prior/legacy GEOID to its current canonical
+- **`history_edges.csv`** — 28 1:1 edges from a prior/legacy GEOID to its current canonical
   GEOID. Each row's `source` column says how much to trust it: `census_official` (an
   individually verified Census rename/renumbering, with a citation in the note),
   `census_official_approximate` (a genuine Census change involving small annexed slivers this
@@ -26,7 +26,9 @@ table and the findings write-ups. This file is the orientation layer.
   (`02070` Dillingham, `02290` Yukon-Koyukuk) are also ordinary current GEOIDs** — on
   current-vintage data they must pass straight through and must not be fanned out; only
   2015-scheme data (`cid2`) should fan them out.
-- Also present: `census2015_link.csv`, `locations_2015_ak.csv`, `out_of_scope.csv`.
+- Also present: `census2015_link.csv`, `combinations_2015.csv` (combined reporting units in the
+  2015 scheme; membership only, allocation is the consumer's choice), `locations_2015_ak.csv`,
+  `out_of_scope.csv`.
 
 ## Crosswalks (`src/rpa_geo/crosswalks/`)
 
@@ -34,23 +36,21 @@ One module per consumer: `downscaling_cid2.py` (`cid2`), `slr_county_fips.py`
 (`county_fips`; pure identity — TIGER 2024 and canonical 2025 share an identical GEOID
 universe, verified by full diff), `landuse2030_fips.py` (`fips`), `data_portal_landuse.py`,
 and `census2015.py` (canonical → `cid2`, the direction needed to feed `urban-rents` /
-`rpa-slr` / `rpa-slr-landuse` outputs into Prestemon's Stata models). Each ships
+`rpa-slr` / `coastal-land-loss` outputs into Prestemon's Stata models). Each ships
 `validate_universe()`.
+
+`county-climate` reads the canonical county table directly (no crosswalk module). The other
+consumers pin the released tag `v0.4.0`, except `rpa-socioeconomic-downscaling`, which uses a path
+dependency.
 
 ## rpa-landuse-2030 `georef.csv` anomalies
 
-Three were found; two are fixed upstream but their guards are deliberately retained as
-**empty, documented frozensets** in `landuse2030_fips.py` so a regression re-fires:
-
-- `CT_DUPLICATE_NEW_REGIONS` — `georef.csv` represented part of Connecticut twice (all 8 old
-  counties *and* 2 of the 9 new planning regions, 09130 + 09180, as independent rows), which
-  double-counts CT for anything summing every row. Issue #80, fixed 2026-07-10 in PR #86.
-- `UNEXPECTED_NON_CONUS_IN_GEOREF` — 27 non-CONUS rows despite the file's own documented
-  CONUS+DC-only design (4 HI counties, 22 PR municipios, 1 VI island). Issue #81, fixed in
-  the same PR #86.
-- `KNOWN_MISSING_CONUS_GEOIDS` — **still open** (issue #87): 35 canonical CONUS+DC GEOIDs are
-  absent from `georef.csv` entirely — DC (`11001`), Denver and Broomfield CO
-  (`08031`/`08014`), St. Louis City (`29510`), Arlington County and 30 Virginia independent
-  cities. `resolve()` only classifies values *present* in a file, so it can never surface
-  this shape of anomaly; it was found by diffing the canonical `is_conus` set against the live
-  file. Likely a longstanding NRI survey-coverage gap for non-standard county-equivalents.
+`landuse2030_fips.py` guards three known anomalies. Two are fixed upstream (landuse-rpa-2030 #80
+and #81, via PR #86), and their guards are kept as **empty, documented frozensets** so a regression
+re-fires: `CT_DUPLICATE_NEW_REGIONS` (Connecticut represented twice, old counties plus two new
+planning regions) and `UNEXPECTED_NON_CONUS_IN_GEOREF` (non-CONUS rows in a CONUS+DC-only file).
+`KNOWN_MISSING_CONUS_GEOIDS` is **still open** (landuse-rpa-2030 #87): 35 canonical CONUS+DC GEOIDs
+(DC, Denver and Broomfield CO, St. Louis City, Arlington County and 30 Virginia independent cities)
+are absent from `georef.csv`. `resolve()` only classifies values *present* in a file, so it can
+never surface this shape of anomaly; find it by diffing the canonical `is_conus` set against the
+live file. The module docstring and README carry the details.

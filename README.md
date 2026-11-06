@@ -110,10 +110,12 @@ can actually import them, not just this repo's own test suite via a
 | Repo | Key | Module | Status |
 |---|---|---|---|
 | rpa-socioeconomic-downscaling | `cid2` | `rpa_geo.crosswalks.downscaling_cid2` | All 3,197 live values resolve to an explicit status; 2 flagged for owner review (see findings below). Ships `validate_universe()`. |
-| rpa-slr / rpa-slr-landuse | `county_fips` | `rpa_geo.crosswalks.slr_county_fips` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. Ships `validate_universe()`. |
+| rpa-slr / coastal-land-loss | `county_fips` | `rpa_geo.crosswalks.slr_county_fips` | Pure identity mapping -- TIGER 2024 and canonical 2025 share an identical GEOID universe, verified by full diff. Ships `validate_universe()`. |
 | rpa-landuse-2030 | `fips` | `rpa_geo.crosswalks.landuse2030_fips` | All 3,075 live `georef.csv` values resolve; 2 of the 3 anomalies found have been fixed upstream, 1 still open (see findings below). Ships `validate_universe()`. |
 | rpa-data-portal | n/a | `rpa_geo.crosswalks.data_portal_landuse` | Documentation only, no resolve() (and so no `validate_universe()`) -- the ETL only ever aggregates to state (`county[:2]`), never publishes a county-level GEOID itself, so old/new CT is a non-issue there today. Source JSON wasn't available locally to validate further. |
-| urban-rents / rpa-slr / rpa-slr-landuse outputs -> J. Prestemon's Stata models | canonical GEOID -> `cid2` | `rpa_geo.crosswalks.census2015` | The canonical 2025 <-> 2015-scheme link (see the dedicated section below). All but 35 canonical GEOIDs resolve; the 31 `membership_2015_unknown` codes and MP's 4 municipalities are documented gaps awaiting owner input. Ships `validate_universe()`. |
+| urban-rents / rpa-slr / coastal-land-loss outputs -> J. Prestemon's Stata models | canonical GEOID -> `cid2` | `rpa_geo.crosswalks.census2015` | The canonical 2025 <-> 2015-scheme link (see the dedicated section below). All but 35 canonical GEOIDs resolve; the 31 `membership_2015_unknown` codes and MP's 4 municipalities are documented gaps awaiting owner input. Ships `validate_universe()`. |
+
+`county-climate` keys on canonical GEOIDs directly and needs no crosswalk.
 
 ## The canonical 2025 <-> 2015 link (`crosswalks/census2015`)
 
@@ -121,7 +123,7 @@ The per-repo crosswalks above answer "what canonical geography does this
 repo's key mean?". `census2015.py` answers the *opposite*, portfolio-level
 question: **which location in the 2015-vintage scheme used by J. Prestemon's
 Stata econometric models consumes this current county's value** -- the
-direction needed to feed urban-rents / rpa-slr / rpa-slr-landuse outputs
+direction needed to feed urban-rents / rpa-slr / coastal-land-loss outputs
 (all keyed on current GEOIDs) into those models.
 
 The 2015 side is the same scheme rpa-socioeconomic-downscaling carries as
@@ -366,7 +368,7 @@ generalizes across all four:
    current-vintage data they must pass through directly, and only
    2015-scheme data (like downscaling's `cid2`) should fan them out. Then
    pick a weight basis: land area (`share_of_predecessor` /
-   `share_of_new_region`, all 25 rows) or, for CT only, 2020 town population
+   `share_of_new_region`, all 32 rows) or, for CT only, 2020 town population
    (`population_share_of_predecessor` / `population_share_of_new_region`,
    19 rows -- `None` for AK). Use population weights if you're allocating
    people/economic data; land-area weights if you're allocating land. Then
@@ -427,11 +429,13 @@ the 2030 Census).
    today's repo-specific crosswalks (each of which bridges canonical
    against a genuinely different, repo-invented key).
 
-Add as a dependency from a consuming repo with:
+Add as a dependency from a consuming repo by pinning a released tag in `[tool.uv.sources]`:
 
-```bash
-uv add --editable ../rpa-geo
+```toml
+rpa-geo = { git = "https://github.com/mihiarc/rpa-geo.git", tag = "v0.4.0" }
 ```
+
+Use `uv add --editable ../rpa-geo` only when developing rpa-geo itself.
 
 Then use your repo's crosswalk directly:
 
@@ -448,3 +452,5 @@ r.shares            # land-area weight per successor
 # anything falls outside the resolved/correctly-excluded categories.
 validate_universe(live_cid2_values)
 ```
+
+MIT licensed; see `LICENSE`.
